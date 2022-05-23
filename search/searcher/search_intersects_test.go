@@ -167,6 +167,42 @@ func TestPolygonIntersects(t *testing.T) {
 			Desc:         "coincident polygons",
 			Expected:     []string{"polygon1"},
 		},
+		{
+			QueryShape: [][][]float64{{{1.0, 1.0}, {2.0, 1.0}, {2.0, 2.0},
+				{1.0, 2.0}, {1.0, 1.0}}},
+			DocShapeVertices: [][][]float64{{{1.2, 1.2}, {2.0, 1.0}, {2.0, 2.0},
+				{1.0, 2.0}, {1.2, 1.2}}},
+			DocShapeName: "polygon1",
+			Desc:         "polygon and a window polygon",
+			Expected:     []string{"polygon1"},
+		},
+		{
+			QueryShape: [][][]float64{{{1.0, 1.0}, {2.0, 1.0}, {2.0, 2.0},
+				{1.0, 2.0}, {1.0, 1.0}}},
+			DocShapeVertices: [][][]float64{{{1.1, 1.1}, {1.2, 1.1}, {1.2, 1.2},
+				{1.1, 1.2}, {1.1, 1.1}}},
+			DocShapeName: "polygon1",
+			Desc:         "nested polygons",
+			Expected:     []string{"polygon1"},
+		},
+		{
+			QueryShape: [][][]float64{{{1.0, 1.0}, {2.0, 1.0}, {2.0, 2.0},
+				{1.0, 2.0}, {1.0, 1.0}}},
+			DocShapeVertices: [][][]float64{{{0.0, 1.0}, {2.0, 1.0}, {2.0, 2.0},
+				{0.0, 2.0}, {0.0, 1.0}}},
+			DocShapeName: "polygon1",
+			Desc:         "intersecting polygons",
+			Expected:     []string{"polygon1"},
+		},
+		{
+			QueryShape: [][][]float64{{{1.0, 1.0}, {2.0, 1.0}, {2.0, 2.0},
+				{1.0, 2.0}, {1.0, 1.0}}},
+			DocShapeVertices: [][][]float64{{{3.0, 3.0}, {4.0, 3.0}, {4.0, 4.0},
+				{3.0, 4.0}, {3.0, 3.0}}},
+			DocShapeName: "polygon1",
+			Desc:         "disjoint polygons",
+			Expected:     nil,
+		},
 	}
 	i := setupIndex(t)
 
