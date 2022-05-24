@@ -628,6 +628,68 @@ func TestMultiLinestringIntersects(t *testing.T) {
 	}
 }
 
+func TestMultiLinestringMultiPointIntersects(t *testing.T) {
+	tests := []struct {
+		QueryShape       [][][]float64
+		DocShapeVertices [][]float64
+		DocShapeName     string
+		Desc             string
+		Expected         []string
+	}{
+		{
+			QueryShape:       [][][]float64{{{2.0, 2.0}, {2.1, 2.1}}, {{3.0, 3.0}, {3.1, 3.1}}},
+			DocShapeVertices: [][]float64{{5.0, 6.0}, {67, 67}, {3.1, 3.1}},
+			DocShapeName:     "multipoint1",
+			Desc:             "multilinestring intersects one of the multipoints",
+			Expected:         []string{"multipoint1"},
+		},
+		{
+			QueryShape:       [][][]float64{{{2.0, 2.0}, {2.1, 2.1}}, {{3.0, 3.0}, {3.1, 3.1}}},
+			DocShapeVertices: [][]float64{{56.0, 56.0}, {66, 66}},
+			DocShapeName:     "multipoint1",
+			Desc:             "multilinestring intersects one of the multipoints",
+			Expected:         nil,
+		},
+	}
+
+	i := setupIndex(t)
+
+	for _, test := range tests {
+		doc := document.NewDocument(test.DocShapeName)
+		doc.AddField(document.NewGeoShapeFieldWithIndexingOptions("geometry", []uint64{},
+			[][][][]float64{{test.DocShapeVertices}}, "multipoint", document.DefaultGeoShapeIndexingOptions))
+		err := i.Update(doc)
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+
+		indexReader, err := i.Reader()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		t.Run(test.Desc, func(t *testing.T) {
+			got, err := runGeoShapeMultiLinestringIntersectsQuery("intersects",
+				indexReader, test.QueryShape, "geometry")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got, test.Expected) {
+				t.Errorf("expected %v, got %v for polygon: %+v",
+					test.Expected, got, test.QueryShape)
+			}
+		})
+		err = i.Delete(doc.ID())
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+		err = indexReader.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func TestPolygonIntersects(t *testing.T) {
 	tests := []struct {
 		QueryShape       [][][]float64
@@ -815,6 +877,69 @@ func TestMultiPolygonIntersects(t *testing.T) {
 		doc := document.NewDocument(test.DocShapeName)
 		doc.AddField(document.NewGeoShapeFieldWithIndexingOptions("geometry", []uint64{},
 			test.DocShapeVertices, "polygon", document.DefaultGeoShapeIndexingOptions))
+		err := i.Update(doc)
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+
+		indexReader, err := i.Reader()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		t.Run(test.Desc, func(t *testing.T) {
+			got, err := runGeoShapeMultiPolygonQueryWithRelation("intersects",
+				indexReader, test.QueryShape, "geometry")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got, test.Expected) {
+				t.Errorf("expected %v, got %v for multipolygon: %+v",
+					test.Expected, got, test.QueryShape)
+			}
+		})
+		err = i.Delete(doc.ID())
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+		err = indexReader.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestMultiPolygonMultiPointIntersects(t *testing.T) {
+	tests := []struct {
+		QueryShape       [][][][]float64
+		DocShapeVertices [][]float64
+		DocShapeName     string
+		Desc             string
+		Expected         []string
+	}{
+		{ // check this one
+			QueryShape: [][][][]float64{{{{30, 20}, {45, 40}, {10, 40}, {30, 20}},
+				{{15, 5}, {40, 10}, {10, 20}, {5, 10}, {15, 5}}}},
+			DocShapeVertices: [][]float64{{30, 20}, {30, 30}},
+			DocShapeName:     "multipoint1",
+			Desc:             "multipolygon intersects multipoint",
+			Expected:         []string{"multipoint1"},
+		},
+		{
+			QueryShape: [][][][]float64{{{{15, 5}, {40, 10}, {10, 20}, {5, 10}, {15, 5}},
+				{{30, 20}, {45, 50}, {10, 50}, {30, 20}}}},
+			DocShapeVertices: [][]float64{{30, -20}, {-30, 30}, {45, 66}},
+			DocShapeName:     "multipoint1",
+			Desc:             "multipolygon does not intersect multipoint",
+			Expected:         nil,
+		},
+	}
+	i := setupIndex(t)
+
+	for _, test := range tests {
+		doc := document.NewDocument(test.DocShapeName)
+		doc.AddField(document.NewGeoShapeFieldWithIndexingOptions("geometry", []uint64{},
+			[][][][]float64{{test.DocShapeVertices}}, "multipoint", document.DefaultGeoShapeIndexingOptions))
 		err := i.Update(doc)
 		if err != nil {
 			t.Errorf(err.Error())
