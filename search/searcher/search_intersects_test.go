@@ -150,6 +150,90 @@ func TestMultiPointIntersects(t *testing.T) {
 	}
 }
 
+func TestLinestringIntersects(t *testing.T) {
+	tests := []struct {
+		QueryShape       [][]float64
+		DocShapeVertices [][]float64
+		DocShapeName     string
+		Desc             string
+		Expected         []string
+	}{
+		{
+			QueryShape:       [][]float64{{3.0, 2.0}, {4.0, 2.0}},
+			DocShapeVertices: [][]float64{{3.0, 2.0}, {4.0, 2.0}},
+			DocShapeName:     "linestring1",
+			Desc:             "coincident linestrings",
+			Expected:         []string{"linestring1"},
+		},
+		{ // check this one
+			QueryShape:       [][]float64{{1.0, 1.0}, {1.5, 1.5}, {2.0, 2.0}},
+			DocShapeVertices: [][]float64{{2.0, 2.0}, {4.0, 3.0}},
+			DocShapeName:     "linestring1",
+			Desc:             "linestrings intersecting at the ends",
+			Expected:         []string{"linestring1"},
+		},
+		{
+			QueryShape:       [][]float64{{1.0, 1.0}, {2.0, 2.0}},
+			DocShapeVertices: [][]float64{{1.5499860, 1.5501575}, {1.5, 1.5001714}},
+			DocShapeName:     "linestring1",
+			Desc:             "subline inside linestring",
+			Expected:         []string{"linestring1"},
+		},
+		{ // not as expected
+			QueryShape:       [][]float64{{1.0, 1.0}, {1.5, 1.5}, {2.0, 2.0}},
+			DocShapeVertices: [][]float64{{1.0, 2.0}, {2.0, 1.0}},
+			DocShapeName:     "linestring1",
+			Desc:             "linestrings intersecting at some edge",
+			Expected:         []string{"linestring1"},
+		},
+		{
+			QueryShape:       [][]float64{{1.0, 1.0}, {1.5, 1.5}, {2.0, 2.0}},
+			DocShapeVertices: [][]float64{{1.0, 2.0}, {1.0, 4.0}},
+			DocShapeName:     "linestring1",
+			Desc:             "non intersecting linestrings",
+			Expected:         nil,
+		},
+	}
+
+	i := setupIndex(t)
+
+	for _, test := range tests {
+		doc := document.NewDocument(test.DocShapeName)
+		doc.AddField(document.NewGeoShapeFieldWithIndexingOptions("geometry", []uint64{},
+			[][][][]float64{{test.DocShapeVertices}}, "linestring", document.DefaultGeoShapeIndexingOptions))
+		err := i.Update(doc)
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+
+		indexReader, err := i.Reader()
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() {
+			err = indexReader.Close()
+			if err != nil {
+				t.Fatal(err)
+			}
+		}()
+		t.Run(test.Desc, func(t *testing.T) {
+			got, err := runGeoShapeLinestringIntersectsQuery("intersects",
+				indexReader, test.QueryShape, "geometry")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got, test.Expected) {
+				t.Errorf("expected %v, got %v for polygon: %+v",
+					test.Expected, got, test.QueryShape)
+			}
+		})
+		err = i.Delete(doc.ID())
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+	}
+}
+
 func TestPolygonIntersects(t *testing.T) {
 	tests := []struct {
 		QueryShape       [][][]float64
