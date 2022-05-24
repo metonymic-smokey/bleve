@@ -490,6 +490,82 @@ func TestLinestringPolygonIntersects(t *testing.T) {
 	}
 }
 
+func TestLinestringPointIntersects(t *testing.T) {
+	tests := []struct {
+		QueryShape       [][]float64
+		DocShapeVertices []float64
+		DocShapeName     string
+		Desc             string
+		Expected         []string
+	}{
+		{
+			QueryShape:       [][]float64{{179, 0}, {-179, 0}},
+			DocShapeVertices: []float64{179.1, 0},
+			DocShapeName:     "point1",
+			Desc:             "point across longitudinal boundary of linestring",
+			Expected:         []string{"point1"},
+		},
+		{
+			QueryShape:       [][]float64{{-179, 0}, {179, 0}},
+			DocShapeVertices: []float64{179.1, 0},
+			DocShapeName:     "point1",
+			Desc:             "point across longitudinal boundary of reversed linestring",
+			Expected:         []string{"point1"},
+		},
+		{
+			QueryShape:       [][]float64{{179, 0}, {-179, 0}},
+			DocShapeVertices: []float64{170, 0},
+			DocShapeName:     "point1",
+			Desc:             "point does not intersect linestring",
+			Expected:         nil,
+		},
+		{
+			QueryShape:       [][]float64{{-179, 0}, {179, 0}},
+			DocShapeVertices: []float64{170, 0},
+			DocShapeName:     "point1",
+			Desc:             "point does not intersect reversed linestring",
+			Expected:         nil,
+		},
+	}
+
+	i := setupIndex(t)
+
+	for _, test := range tests {
+		doc := document.NewDocument(test.DocShapeName)
+		doc.AddField(document.NewGeoShapeFieldWithIndexingOptions("geometry", []uint64{},
+			[][][][]float64{{{test.DocShapeVertices}}}, "point", document.DefaultGeoShapeIndexingOptions))
+		err := i.Update(doc)
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+
+		indexReader, err := i.Reader()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		t.Run(test.Desc, func(t *testing.T) {
+			got, err := runGeoShapeLinestringIntersectsQuery("intersects",
+				indexReader, test.QueryShape, "geometry")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got, test.Expected) {
+				t.Errorf("expected %v, got %v for linestring: %+v",
+					test.Expected, got, test.QueryShape)
+			}
+		})
+		err = i.Delete(doc.ID())
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+		err = indexReader.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func TestMultiLinestringIntersects(t *testing.T) {
 	tests := []struct {
 		QueryShape       [][][]float64
@@ -612,6 +688,68 @@ func TestPolygonIntersects(t *testing.T) {
 		doc := document.NewDocument(test.DocShapeName)
 		doc.AddField(document.NewGeoShapeFieldWithIndexingOptions("geometry", []uint64{},
 			[][][][]float64{test.DocShapeVertices}, "polygon", document.DefaultGeoShapeIndexingOptions))
+		err := i.Update(doc)
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+
+		indexReader, err := i.Reader()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		t.Run(test.Desc, func(t *testing.T) {
+			got, err := runGeoShapePolygonQueryWithRelation("intersects",
+				indexReader, test.QueryShape, "geometry")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got, test.Expected) {
+				t.Errorf("expected %v, got %v for polygon: %+v",
+					test.Expected, got, test.QueryShape)
+			}
+		})
+		err = i.Delete(doc.ID())
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+		err = indexReader.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestPolygonPointIntersects(t *testing.T) {
+	tests := []struct {
+		QueryShape       [][][]float64
+		DocShapeVertices []float64
+		DocShapeName     string
+		Desc             string
+		Expected         []string
+	}{
+		{
+			QueryShape:       [][][]float64{{{150, 85}, {160, 85}, {-20, 85}, {-30, 85}, {150, 85}}},
+			DocShapeVertices: []float64{150, 88},
+			DocShapeName:     "point1",
+			Desc:             "polygon intersects point in latitudinal boundary",
+			Expected:         []string{"point1"},
+		},
+		{
+			QueryShape:       [][][]float64{{{150, 85}, {160, 85}, {-20, 85}, {-30, 85}, {150, 85}}},
+			DocShapeVertices: []float64{170, 88},
+			DocShapeName:     "point1",
+			Desc:             "polygon does not intersects point outside latitudinal boundary",
+			Expected:         nil,
+		},
+	}
+
+	i := setupIndex(t)
+
+	for _, test := range tests {
+		doc := document.NewDocument(test.DocShapeName)
+		doc.AddField(document.NewGeoShapeFieldWithIndexingOptions("geometry", []uint64{},
+			[][][][]float64{{{test.DocShapeVertices}}}, "point", document.DefaultGeoShapeIndexingOptions))
 		err := i.Update(doc)
 		if err != nil {
 			t.Errorf(err.Error())
