@@ -69,13 +69,6 @@ func TestPointIntersects(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		defer func() {
-			err := indexReader.Close()
-			if err != nil {
-				t.Fatal(err)
-			}
-		}()
-
 		// indexing and searching independently for each case.
 		t.Run(test.Desc, func(t *testing.T) {
 			got, err := runGeoShapePointRelationQuery("intersects",
@@ -91,6 +84,10 @@ func TestPointIntersects(t *testing.T) {
 		err = i.Delete(doc.ID())
 		if err != nil {
 			t.Errorf(err.Error())
+		}
+		err = indexReader.Close()
+		if err != nil {
+			t.Fatal(err)
 		}
 	}
 }
@@ -126,12 +123,7 @@ func TestMultiPointIntersects(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer func() {
-			err = indexReader.Close()
-			if err != nil {
-				t.Fatal(err)
-			}
-		}()
+
 		t.Run(test.Desc, func(t *testing.T) {
 			got, err := runGeoShapePointRelationQuery("intersects",
 				true, indexReader, test.QueryShape, "geometry")
@@ -146,6 +138,10 @@ func TestMultiPointIntersects(t *testing.T) {
 		err = i.Delete(doc.ID())
 		if err != nil {
 			t.Errorf(err.Error())
+		}
+		err = indexReader.Close()
+		if err != nil {
+			t.Fatal(err)
 		}
 	}
 }
@@ -210,12 +206,7 @@ func TestLinestringIntersects(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer func() {
-			err = indexReader.Close()
-			if err != nil {
-				t.Fatal(err)
-			}
-		}()
+
 		t.Run(test.Desc, func(t *testing.T) {
 			got, err := runGeoShapeLinestringIntersectsQuery("intersects",
 				indexReader, test.QueryShape, "geometry")
@@ -230,6 +221,10 @@ func TestLinestringIntersects(t *testing.T) {
 		err = i.Delete(doc.ID())
 		if err != nil {
 			t.Errorf(err.Error())
+		}
+		err = indexReader.Close()
+		if err != nil {
+			t.Fatal(err)
 		}
 	}
 }
@@ -303,12 +298,7 @@ func TestPolygonIntersects(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer func() {
-			err = indexReader.Close()
-			if err != nil {
-				t.Fatal(err)
-			}
-		}()
+
 		t.Run(test.Desc, func(t *testing.T) {
 			got, err := runGeoShapePolygonQueryWithRelation("intersects",
 				indexReader, test.QueryShape, "geometry")
@@ -323,6 +313,10 @@ func TestPolygonIntersects(t *testing.T) {
 		err = i.Delete(doc.ID())
 		if err != nil {
 			t.Errorf(err.Error())
+		}
+		err = indexReader.Close()
+		if err != nil {
+			t.Fatal(err)
 		}
 	}
 }
