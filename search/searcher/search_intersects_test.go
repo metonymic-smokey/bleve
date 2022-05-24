@@ -971,3 +971,184 @@ func TestMultiPolygonMultiPointIntersects(t *testing.T) {
 		}
 	}
 }
+
+func TestMultiPolygonMultiLinestringIntersects(t *testing.T) {
+	tests := []struct {
+		QueryShape       [][][][]float64
+		DocShapeVertices [][][]float64
+		DocShapeName     string
+		Desc             string
+		Expected         []string
+	}{
+		{
+			QueryShape:       [][][][]float64{{{{15, 5}, {40, 10}, {10, 20}, {5, 10}, {15, 5}}, {{30, 20}, {45, 40}, {10, 40}, {30, 20}}}},
+			DocShapeVertices: [][][]float64{{{65, 40}, {60, 40}}, {{45, 40}, {10, 40}, {30, 20}}},
+			DocShapeName:     "multilinestring1",
+			Desc:             "multipolygon intersects multilinestring",
+			Expected:         []string{"multilinestring1"},
+		},
+		{
+			QueryShape:       [][][][]float64{{{{15, 5}, {40, 10}, {10, 20}, {5, 10}, {15, 5}}, {{30, 20}, {45, 40}, {10, 40}, {30, 20}}}},
+			DocShapeVertices: [][][]float64{{{45, 41}, {60, 80}}, {{-45, -40}, {-10, -40}}},
+			DocShapeName:     "multilinestring1",
+			Desc:             "multipolygon does not intersect multilinestring",
+			Expected:         nil,
+		},
+	}
+	i := setupIndex(t)
+
+	for _, test := range tests {
+		doc := document.NewDocument(test.DocShapeName)
+		doc.AddField(document.NewGeoShapeFieldWithIndexingOptions("geometry", []uint64{},
+			[][][][]float64{test.DocShapeVertices}, "multilinestring", document.DefaultGeoShapeIndexingOptions))
+		err := i.Update(doc)
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+
+		indexReader, err := i.Reader()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		t.Run(test.Desc, func(t *testing.T) {
+			got, err := runGeoShapeMultiPolygonQueryWithRelation("intersects",
+				indexReader, test.QueryShape, "geometry")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got, test.Expected) {
+				t.Errorf("expected %v, got %v for multipolygon: %+v",
+					test.Expected, got, test.QueryShape)
+			}
+		})
+		err = i.Delete(doc.ID())
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+		err = indexReader.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestGeometryCollectionIntersects(t *testing.T) {
+	tests := []struct {
+		QueryShape       [][][][][]float64
+		DocShapeVertices [][][][][]float64
+		DocShapeName     string
+		Desc             string
+		Expected         []string
+	}{
+		{
+			QueryShape:       nil,
+			DocShapeVertices: nil,
+			DocShapeName:     "geometrycollection1",
+			Desc:             "empty geometry collections",
+			Expected:         nil,
+		},
+	}
+
+	i := setupIndex(t)
+
+	for _, test := range tests {
+		doc := document.NewDocument(test.DocShapeName)
+		doc.AddField(document.NewGeometryCollectionFieldWithIndexingOptions("geometry",
+			[]uint64{}, test.DocShapeVertices, nil, document.DefaultGeoShapeIndexingOptions))
+		err := i.Update(doc)
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+
+		indexReader, err := i.Reader()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		t.Run(test.Desc, func(t *testing.T) {
+			got, err := runGeoShapeGeometryCollectionRelationQuery("intersects",
+				indexReader, test.QueryShape, nil, "geometry")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got, test.Expected) {
+				t.Errorf("expected %v, got %v for geometry collection: %+v",
+					test.Expected, got, test.QueryShape)
+			}
+		})
+		err = i.Delete(doc.ID())
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+		err = indexReader.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestGeometryCollectionPointIntersects(t *testing.T) {
+	tests := []struct {
+		QueryShape       []float64
+		DocShapeVertices [][][][][]float64
+		DocShapeName     string
+		Desc             string
+		Expected         []string
+		Types            []string
+	}{
+		{
+			QueryShape:       []float64{1.0, 2.0},
+			DocShapeVertices: nil,
+			DocShapeName:     "geometrycollection1",
+			Desc:             "geometry collection does not intersect with a point",
+			Expected:         nil,
+			Types:            nil,
+		},
+		{
+			QueryShape:       []float64{1.0, 2.0},
+			DocShapeVertices: [][][][][]float64{{{{{1.0, 2.0}}}}},
+			DocShapeName:     "geometrycollection1",
+			Desc:             "geometry collection intersects with a point",
+			Expected:         []string{"geometrycollection1"},
+			Types:            []string{"point"},
+		},
+	}
+
+	i := setupIndex(t)
+
+	for _, test := range tests {
+		doc := document.NewDocument(test.DocShapeName)
+		doc.AddField(document.NewGeometryCollectionFieldWithIndexingOptions("geometry",
+			[]uint64{}, test.DocShapeVertices, test.Types, document.DefaultGeoShapeIndexingOptions))
+		err := i.Update(doc)
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+
+		indexReader, err := i.Reader()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		t.Run(test.Desc, func(t *testing.T) {
+			got, err := runGeoShapePointRelationQuery("intersects",
+				false, indexReader, [][]float64{test.QueryShape}, "geometry")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got, test.Expected) {
+				t.Errorf("expected %v, got %v for point: %+v",
+					test.Expected, got, test.QueryShape)
+			}
+		})
+		err = i.Delete(doc.ID())
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+		err = indexReader.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
