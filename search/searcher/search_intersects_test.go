@@ -342,6 +342,13 @@ func TestLinestringIntersects(t *testing.T) {
 			Desc:             "non intersecting linestrings",
 			Expected:         nil,
 		},
+		{
+			QueryShape:       [][]float64{{59.32, 0.52}, {68.99, -7.36}, {75.49, -12.21}},
+			DocShapeVertices: [][]float64{{71.98, 0}, {67.58, -6.57}, {63.19, -12.72}},
+			DocShapeName:     "linestring1",
+			Desc:             "linestrings with more than 2 points intersecting at some edges",
+			Expected:         []string{"linestring1"},
+		},
 	}
 
 	i := setupIndex(t)
@@ -525,6 +532,20 @@ func TestLinestringPointIntersects(t *testing.T) {
 			DocShapeName:     "point1",
 			Desc:             "point does not intersect reversed linestring",
 			Expected:         nil,
+		},
+		{
+			QueryShape:       [][]float64{{-179, 0}, {179, 0}, {178, 0}},
+			DocShapeVertices: []float64{178, 0},
+			DocShapeName:     "point1",
+			Desc:             "point intersects linestring with multiple points",
+			Expected:         []string{"point1"},
+		},
+		{
+			QueryShape:       [][]float64{{-179, 0}, {179, 0}, {178, 0}, {180, 0}},
+			DocShapeVertices: []float64{178, 0},
+			DocShapeName:     "point1",
+			Desc:             "point intersects linestring with multiple points",
+			Expected:         []string{"point1"},
 		},
 	}
 
