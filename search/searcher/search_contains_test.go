@@ -72,6 +72,71 @@ func TestPointWithin(t *testing.T) {
 	}
 }
 
+func TestMultiPointWithin(t *testing.T) {
+	tests := []struct {
+		QueryShape       [][]float64
+		DocShapeVertices [][]float64
+		DocShapeName     string
+		Expected         []string
+		Desc             string
+		QueryType        string
+	}{
+		{
+			QueryShape:       [][]float64{{1.0, 1.0}, {2.0, 2.0}},
+			DocShapeVertices: [][]float64{{1.0, 1.0}},
+			DocShapeName:     "multipoint1",
+			Expected:         []string{"multipoint1"},
+			Desc:             "single multipoint common",
+			QueryType:        "within",
+		},
+		{
+			QueryShape:       [][]float64{{1.0, 1.0}},
+			DocShapeVertices: [][]float64{{1.0, 1.0}, {2.0, 2.0}},
+			DocShapeName:     "multipoint1",
+			Expected:         nil,
+			Desc:             "multipoint not covered by multiple multipoints",
+			QueryType:        "within",
+		},
+	}
+
+	i := setupIndex(t)
+
+	for _, test := range tests {
+		doc := document.NewDocument(test.DocShapeName)
+		doc.AddField(document.NewGeoShapeFieldWithIndexingOptions("geometry", []uint64{},
+			[][][][]float64{{test.DocShapeVertices}}, "multipoint", document.DefaultGeoShapeIndexingOptions))
+		err := i.Update(doc)
+		if err != nil {
+			t.Error(err)
+		}
+
+		indexReader, err := i.Reader()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		t.Run(test.Desc, func(t *testing.T) {
+			got, err := runGeoShapePointRelationQuery(test.QueryType,
+				true, indexReader, test.QueryShape, "geometry")
+			if err != nil {
+				t.Errorf(err.Error())
+			}
+			if !reflect.DeepEqual(got, test.Expected) {
+				t.Errorf("expected %v, got %v for multipoint: %+v",
+					test.Expected, got, test.QueryShape)
+			}
+		})
+		err = i.Delete(doc.ID())
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+		err = indexReader.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func TestPointLinestringWithin(t *testing.T) {
 	tests := []struct {
 		QueryShape       []float64
