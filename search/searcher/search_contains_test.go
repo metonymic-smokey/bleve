@@ -7,7 +7,7 @@ import (
 	"github.com/blevesearch/bleve/v2/document"
 )
 
-func TestPointContains(t *testing.T) {
+func TestPointWithin(t *testing.T) {
 	tests := []struct {
 		QueryShape       []float64
 		DocShapeVertices []float64
@@ -22,7 +22,7 @@ func TestPointContains(t *testing.T) {
 			DocShapeName:     "point1",
 			Expected:         []string{"point1"},
 			Desc:             "point contains itself",
-			QueryType:        "contains",
+			QueryType:        "within",
 		},
 		{
 			QueryShape:       []float64{1.0, 1.0},
@@ -30,7 +30,7 @@ func TestPointContains(t *testing.T) {
 			DocShapeName:     "point1",
 			Expected:         nil,
 			Desc:             "point does not contain a different point",
-			QueryType:        "contains",
+			QueryType:        "within",
 		},
 	}
 
@@ -72,7 +72,7 @@ func TestPointContains(t *testing.T) {
 	}
 }
 
-func TestPointLinestringContains(t *testing.T) {
+func TestPointLinestringWithin(t *testing.T) {
 	tests := []struct {
 		QueryShape       []float64
 		DocShapeVertices [][]float64
@@ -87,7 +87,7 @@ func TestPointLinestringContains(t *testing.T) {
 			DocShapeName:     "linestring1",
 			Expected:         nil,
 			Desc:             "point does not cover different linestring",
-			QueryType:        "contains",
+			QueryType:        "within",
 		},
 	}
 
@@ -129,7 +129,7 @@ func TestPointLinestringContains(t *testing.T) {
 	}
 }
 
-func TestPointPolygonContains(t *testing.T) {
+func TestPointPolygonWithin(t *testing.T) {
 	tests := []struct {
 		QueryShape       []float64
 		DocShapeVertices [][][]float64
@@ -143,8 +143,8 @@ func TestPointPolygonContains(t *testing.T) {
 			DocShapeVertices: [][][]float64{{{0.0, 0.0}, {1.0, 0.0}, {1.0, 1.0}, {0.0, 1.0}, {0.0, 0.0}}},
 			DocShapeName:     "polygon1",
 			Expected:         nil,
-			Desc:             "point does not cover polygon",
-			QueryType:        "contains",
+			Desc:             "point not within polygon",
+			QueryType:        "within",
 		},
 	}
 
@@ -186,7 +186,7 @@ func TestPointPolygonContains(t *testing.T) {
 	}
 }
 
-func TestLinestringPointContains(t *testing.T) {
+func TestLinestringPointWithin(t *testing.T) {
 	tests := []struct {
 		QueryShape       [][]float64
 		DocShapeVertices []float64
@@ -195,38 +195,38 @@ func TestLinestringPointContains(t *testing.T) {
 		Desc             string
 		QueryType        string
 	}{
-		// check these cases
+		// expect nil in each case since when linestring is the query shape, it's always nil
 		{
 			QueryShape:       [][]float64{{1.0, 1.0}, {2.0, 2.0}, {3.0, 3.0}},
 			DocShapeVertices: []float64{1.0, 1.0},
 			DocShapeName:     "point1",
-			Expected:         []string{"point1"},
+			Expected:         nil,
 			Desc:             "point at start of linestring",
-			QueryType:        "contains",
+			QueryType:        "within",
 		},
 		{
 			QueryShape:       [][]float64{{1.0, 1.0}, {2.0, 2.0}, {3.0, 3.0}},
 			DocShapeVertices: []float64{2.0, 2.0},
 			DocShapeName:     "point1",
-			Expected:         []string{"point1"},
+			Expected:         nil,
 			Desc:             "point in the middle of linestring",
-			QueryType:        "contains",
+			QueryType:        "within",
 		},
 		{
 			QueryShape:       [][]float64{{1.0, 1.0}, {2.0, 2.0}, {3.0, 3.0}},
 			DocShapeVertices: []float64{3.0, 3.0},
 			DocShapeName:     "point1",
-			Expected:         []string{"point1"},
+			Expected:         nil,
 			Desc:             "point at end of linestring",
-			QueryType:        "contains",
+			QueryType:        "within",
 		},
 		{
 			QueryShape:       [][]float64{{1.0, 1.0}, {2.0, 2.0}, {3.0, 3.0}},
 			DocShapeVertices: []float64{1.5, 1.50017},
 			DocShapeName:     "point1",
-			Expected:         []string{"point1"},
+			Expected:         nil,
 			Desc:             "point in between linestring",
-			QueryType:        "contains",
+			QueryType:        "within",
 		},
 		{
 			QueryShape:       [][]float64{{1.0, 1.0}, {2.0, 2.0}, {3.0, 3.0}},
@@ -234,7 +234,7 @@ func TestLinestringPointContains(t *testing.T) {
 			DocShapeName:     "point1",
 			Expected:         nil,
 			Desc:             "point not contained by linestring",
-			QueryType:        "contains",
+			QueryType:        "within",
 		},
 	}
 
@@ -256,6 +256,168 @@ func TestLinestringPointContains(t *testing.T) {
 
 		t.Run(test.Desc, func(t *testing.T) {
 			got, err := runGeoShapeLinestringIntersectsQuery(test.QueryType,
+				indexReader, test.QueryShape, "geometry")
+			if err != nil {
+				t.Errorf(err.Error())
+			}
+			if !reflect.DeepEqual(got, test.Expected) {
+				t.Errorf("expected %v, got %v for linestring: %+v",
+					test.Expected, got, test.QueryShape)
+			}
+		})
+		err = i.Delete(doc.ID())
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+		err = indexReader.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestLinestringWithin(t *testing.T) {
+	tests := []struct {
+		QueryShape       [][]float64
+		DocShapeVertices [][]float64
+		DocShapeName     string
+		Expected         []string
+		Desc             string
+		QueryType        string
+	}{
+		{
+			QueryShape:       [][]float64{{1, 1}, {2, 2}, {3, 3}},
+			DocShapeVertices: [][]float64{{1, 1}, {2, 2}, {3, 3}, {4, 4}},
+			DocShapeName:     "linestring1",
+			Expected:         nil,
+			Desc:             "longer linestring",
+			QueryType:        "within",
+		},
+		{
+			QueryShape:       [][]float64{{1, 1}, {2, 2}, {3, 3}},
+			DocShapeVertices: [][]float64{{1, 1}, {2, 2}, {3, 3}},
+			DocShapeName:     "linestring1",
+			Expected:         nil,
+			Desc:             "coincident linestrings",
+			QueryType:        "within",
+		},
+	}
+	i := setupIndex(t)
+
+	for _, test := range tests {
+		doc := document.NewDocument(test.DocShapeName)
+		doc.AddField(document.NewGeoShapeFieldWithIndexingOptions("geometry", []uint64{},
+			[][][][]float64{{test.DocShapeVertices}}, "linestring", document.DefaultGeoShapeIndexingOptions))
+		err := i.Update(doc)
+		if err != nil {
+			t.Error(err)
+		}
+
+		indexReader, err := i.Reader()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		t.Run(test.Desc, func(t *testing.T) {
+			got, err := runGeoShapeLinestringIntersectsQuery(test.QueryType,
+				indexReader, test.QueryShape, "geometry")
+			if err != nil {
+				t.Errorf(err.Error())
+			}
+			if !reflect.DeepEqual(got, test.Expected) {
+				t.Errorf("expected %v, got %v for linestring: %+v",
+					test.Expected, got, test.QueryShape)
+			}
+		})
+		err = i.Delete(doc.ID())
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+		err = indexReader.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestPolygonPointWithin(t *testing.T) {
+	tests := []struct {
+		QueryShape       [][][]float64
+		DocShapeVertices []float64
+		DocShapeName     string
+		Expected         []string
+		Desc             string
+		QueryType        string
+	}{
+		{
+			QueryShape:       [][][]float64{{{0, 0}, {1, 0}, {1, 1}, {0, 1}, {0, 0}}},
+			DocShapeVertices: []float64{0.5, 0.5},
+			DocShapeName:     "point1",
+			Expected:         []string{"point1"},
+			Desc:             "point within polygon",
+			QueryType:        "within",
+		},
+		{
+			QueryShape:       [][][]float64{{{0, 0}, {1, 0}, {1, 1}, {0, 1}, {0, 0}}},
+			DocShapeVertices: []float64{5.5, 5.5},
+			DocShapeName:     "point1",
+			Expected:         nil,
+			Desc:             "point not within polygon",
+			QueryType:        "within",
+		},
+		{
+			QueryShape:       [][][]float64{{{0, 0}, {1, 0}, {1, 1}, {0, 1}, {0, 0}}},
+			DocShapeVertices: []float64{5.5, 5.5},
+			DocShapeName:     "point1",
+			Expected:         nil,
+			Desc:             "point not within polygon",
+			QueryType:        "within",
+		},
+		{
+			QueryShape: [][][]float64{{{0, 0}, {1, 0}, {1, 1}, {0, 1}, {0, 0}},
+				{{0.2, 0.2}, {0.2, 0.4}, {0.4, 0.4}, {0.4, 0.4}, {0.2, 0.2}}},
+			DocShapeVertices: []float64{0.3, 0.3},
+			DocShapeName:     "point1",
+			Expected:         nil,
+			Desc:             "point within polygon hole",
+			QueryType:        "within",
+		},
+		{
+			QueryShape:       [][][]float64{{{0, 0}, {1, 0}, {1, 1}, {0, 1}, {0, 0}}},
+			DocShapeVertices: []float64{1.0, 0.0},
+			DocShapeName:     "point1",
+			Expected:         []string{"point1"},
+			Desc:             "point on polygon vertex",
+			QueryType:        "within",
+		},
+		{
+			QueryShape:       [][][]float64{{{1, 1}, {2, 2}, {0, 2}, {1, 1}}},
+			DocShapeVertices: []float64{1.5, 1.5001714},
+			DocShapeName:     "point1",
+			Expected:         []string{"point1"},
+			Desc:             "point on polygon vertex edge",
+			QueryType:        "within",
+		},
+	}
+
+	i := setupIndex(t)
+
+	for _, test := range tests {
+		doc := document.NewDocument(test.DocShapeName)
+		doc.AddField(document.NewGeoShapeFieldWithIndexingOptions("geometry", []uint64{},
+			[][][][]float64{{{test.DocShapeVertices}}}, "point", document.DefaultGeoShapeIndexingOptions))
+		err := i.Update(doc)
+		if err != nil {
+			t.Error(err)
+		}
+
+		indexReader, err := i.Reader()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		t.Run(test.Desc, func(t *testing.T) {
+			got, err := runGeoShapePolygonQueryWithRelation(test.QueryType,
 				indexReader, test.QueryShape, "geometry")
 			if err != nil {
 				t.Errorf(err.Error())
