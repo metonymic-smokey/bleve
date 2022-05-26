@@ -954,3 +954,119 @@ func TestMultiPolygonWithin(t *testing.T) {
 		}
 	}
 }
+
+func TestGeometryCollectionWithin(t *testing.T) {
+	tests := []struct {
+		QueryShape       [][][][][]float64
+		DocShapeVertices [][][][][]float64
+		DocShapeName     string
+		Desc             string
+		Expected         []string
+		QueryType        string
+	}{
+		{
+			QueryShape:       nil,
+			DocShapeVertices: nil,
+			DocShapeName:     "geometrycollection1",
+			Desc:             "empty geometry collections",
+			Expected:         nil,
+			QueryType:        "within",
+		},
+	}
+
+	i := setupIndex(t)
+
+	for _, test := range tests {
+		doc := document.NewDocument(test.DocShapeName)
+		doc.AddField(document.NewGeometryCollectionFieldWithIndexingOptions("geometry",
+			[]uint64{}, test.DocShapeVertices, nil, document.DefaultGeoShapeIndexingOptions))
+		err := i.Update(doc)
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+
+		indexReader, err := i.Reader()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		t.Run(test.Desc, func(t *testing.T) {
+			got, err := runGeoShapeGeometryCollectionRelationQuery(test.QueryType,
+				indexReader, test.QueryShape, nil, "geometry")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got, test.Expected) {
+				t.Errorf("expected %v, got %v for geometry collection: %+v",
+					test.Expected, got, test.QueryShape)
+			}
+		})
+		err = i.Delete(doc.ID())
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+		err = indexReader.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestGeometryCollectionPointWithin(t *testing.T) {
+	tests := []struct {
+		QueryShape       []float64
+		DocShapeVertices [][][][][]float64
+		DocShapeName     string
+		Desc             string
+		Expected         []string
+		Types            []string
+		QueryType        string
+	}{
+		{
+			QueryShape:       []float64{1.0, 2.0},
+			DocShapeVertices: nil,
+			DocShapeName:     "geometrycollection1",
+			Desc:             "empty geometry collection not within a point",
+			Expected:         nil,
+			Types:            nil,
+			QueryType:        "within",
+		},
+	}
+
+	i := setupIndex(t)
+
+	for _, test := range tests {
+		doc := document.NewDocument(test.DocShapeName)
+		doc.AddField(document.NewGeometryCollectionFieldWithIndexingOptions("geometry",
+			[]uint64{}, test.DocShapeVertices, test.Types, document.DefaultGeoShapeIndexingOptions))
+		err := i.Update(doc)
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+
+		indexReader, err := i.Reader()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		t.Run(test.Desc, func(t *testing.T) {
+			got, err := runGeoShapePointRelationQuery("intersects",
+				false, indexReader, [][]float64{test.QueryShape}, "geometry")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got, test.Expected) {
+				t.Errorf("expected %v, got %v for point: %+v",
+					test.Expected, got, test.QueryShape)
+			}
+		})
+		err = i.Delete(doc.ID())
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+		err = indexReader.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
