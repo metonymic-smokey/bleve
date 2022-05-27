@@ -154,6 +154,14 @@ func TestPointLinestringWithin(t *testing.T) {
 			Desc:             "point does not cover different linestring",
 			QueryType:        "within",
 		},
+		{
+			QueryShape:       []float64{179.1, 0.0},
+			DocShapeVertices: [][]float64{{-179.0, 0.0}, {179.0, 0.0}},
+			DocShapeName:     "linestring1",
+			Expected:         nil,
+			Desc:             "point across latitudinal boundary of linestring",
+			QueryType:        "within",
+		},
 	}
 
 	i := setupIndex(t)
@@ -528,6 +536,22 @@ func TestPolygonPointWithin(t *testing.T) {
 			Desc:             "point on polygon vertex edge",
 			QueryType:        "within",
 		},
+		{ // check this one
+			QueryShape:       [][][]float64{{{150, 85}, {-20, -85}, {-30, 85}, {160, -85}, {150, 85}}},
+			DocShapeVertices: []float64{150, 85},
+			DocShapeName:     "point1",
+			Expected:         []string{"point1"},
+			Desc:             "point inside the polygon's latitudinal boundary",
+			QueryType:        "within",
+		},
+		{
+			QueryShape:       [][][]float64{{{150, 85}, {-20, -85}, {-30, 85}, {160, -85}, {150, 85}}},
+			DocShapeVertices: []float64{170, 85},
+			DocShapeName:     "point1",
+			Expected:         nil,
+			Desc:             "point outside the polygon's latitudinal boundary",
+			QueryType:        "within",
+		},
 	}
 
 	i := setupIndex(t)
@@ -553,7 +577,7 @@ func TestPolygonPointWithin(t *testing.T) {
 				t.Errorf(err.Error())
 			}
 			if !reflect.DeepEqual(got, test.Expected) {
-				t.Errorf("expected %v, got %v for linestring: %+v",
+				t.Errorf("expected %v, got %v for polygon: %+v",
 					test.Expected, got, test.QueryShape)
 			}
 		})
