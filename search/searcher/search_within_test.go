@@ -7,6 +7,15 @@ import (
 	"github.com/blevesearch/bleve/v2/document"
 )
 
+var (
+	leftRect             [][][]float64   = [][][]float64{{{-1, 0}, {0, 0}, {0, 1}, {-1, 1}, {-1, 0}}}
+	leftRectPoint        []float64       = []float64{-0.5, 0.5}
+	rightRect            [][][]float64   = [][][]float64{{{-1, 0}, {0, 0}, {0, 1}, {-1, 1}, {-1, 0}}}
+	rightRectPoint       []float64       = []float64{0.5, 0.5}
+	overLappingRightRect [][][][]float64 = [][][][]float64{{{{-1, 0}, {1, 0}, {1, 1}, {-0.1, 1}, {-1, 0}}}}
+	middleLine           [][]float64     = [][]float64{{-0.5, 0.5}, {0.5, 0.5}}
+)
+
 func TestPointWithin(t *testing.T) {
 	tests := []struct {
 		QueryShape       []float64
@@ -218,6 +227,15 @@ func TestPointPolygonWithin(t *testing.T) {
 			Expected:         nil,
 			Desc:             "point not within polygon",
 			QueryType:        "within",
+		},
+		{ // from binary predicates file
+			QueryShape:       rightRectPoint,
+			DocShapeVertices: rightRect,
+			DocShapeName:     "polygon1",
+			Expected:         nil, // will return nil since a point only returns non-nil for a coincident point
+			// even if the point is on the polygon
+			Desc:      "point on rectangle vertex",
+			QueryType: "within",
 		},
 	}
 
@@ -513,7 +531,7 @@ func TestPolygonPointWithin(t *testing.T) {
 		},
 		{
 			QueryShape: [][][]float64{{{0, 0}, {1, 0}, {1, 1}, {0, 1}, {0, 0}},
-				{{0.2, 0.2}, {0.2, 0.4}, {0.4, 0.4}, {0.4, 0.4}, {0.2, 0.2}}},
+				{{0.2, 0.2}, {0.2, 0.4}, {0.4, 0.4}, {0.4, 0.2}, {0.2, 0.2}}},
 			DocShapeVertices: []float64{0.3, 0.3},
 			DocShapeName:     "point1",
 			Expected:         nil,
@@ -550,6 +568,24 @@ func TestPolygonPointWithin(t *testing.T) {
 			DocShapeName:     "point1",
 			Expected:         nil,
 			Desc:             "point outside the polygon's latitudinal boundary",
+			QueryType:        "within",
+		},
+		{
+			// from binary predicates tests
+			QueryShape:       leftRect,
+			DocShapeVertices: leftRectPoint,
+			DocShapeName:     "point1",
+			Expected:         []string{"point1"},
+			Desc:             "point in left rectangle",
+			QueryType:        "within",
+		},
+		{ // check this one
+			// from binary predicates tests
+			QueryShape:       rightRect,
+			DocShapeVertices: rightRectPoint,
+			DocShapeName:     "point1",
+			Expected:         []string{"point1"},
+			Desc:             "point in right rectangle",
 			QueryType:        "within",
 		},
 	}
@@ -730,6 +766,14 @@ func TestPolygonWithin(t *testing.T) {
 			DocShapeName:     "polygon1",
 			Expected:         nil,
 			Desc:             "polygon totally out of range",
+			QueryType:        "within",
+		},
+		{ // check this one
+			QueryShape:       leftRect,
+			DocShapeVertices: rightRect,
+			DocShapeName:     "polygon1",
+			Expected:         nil,
+			Desc:             "left and right polygons,sharing an edge",
 			QueryType:        "within",
 		},
 	}
