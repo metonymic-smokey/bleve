@@ -10,7 +10,7 @@ import (
 var (
 	leftRect             [][][]float64   = [][][]float64{{{-1, 0}, {0, 0}, {0, 1}, {-1, 1}, {-1, 0}}}
 	leftRectPoint        []float64       = []float64{-0.5, 0.5}
-	rightRect            [][][]float64   = [][][]float64{{{-1, 0}, {0, 0}, {0, 1}, {-1, 1}, {-1, 0}}}
+	rightRect            [][][]float64   = [][][]float64{{{0, 0}, {1, 0}, {1, 1}, {0, 1}, {0, 0}}}
 	rightRectPoint       []float64       = []float64{0.5, 0.5}
 	overLappingRightRect [][][][]float64 = [][][][]float64{{{{-1, 0}, {1, 0}, {1, 1}, {-0.1, 1}, {-1, 0}}}}
 	middleLine           [][]float64     = [][]float64{{-0.5, 0.5}, {0.5, 0.5}}
