@@ -901,8 +901,8 @@ func TestMultiPolygonMultiLinestringWithin(t *testing.T) {
 		QueryType        string
 	}{
 		{
-			QueryShape: [][][][]float64{{{{15, 5}, {40, 10}, {10, 20}, {5, 10}, {15, 5}}},
-				{{{30, 20}, {45, 40}, {10, 40}, {30, 20}}}},
+			QueryShape: [][][][]float64{{{{15, 5}, {40, 10}, {10, 20}, {5, 10}, {15, 5}},
+				{{30, 20}, {45, 40}, {10, 40}, {30, 20}}}},
 			DocShapeVertices: [][][]float64{{{45, 40}, {10, 40}}, {{45, 40}, {10, 40}, {30, 20}}},
 			DocShapeName:     "multilinestring1",
 			Expected:         nil,
@@ -910,8 +910,8 @@ func TestMultiPolygonMultiLinestringWithin(t *testing.T) {
 			QueryType:        "within",
 		},
 		{
-			QueryShape: [][][][]float64{{{{15, 5}, {40, 10}, {10, 20}, {5, 10}, {15, 5}}},
-				{{{30, 20}, {45, 40}, {10, 40}, {30, 20}}}},
+			QueryShape: [][][][]float64{{{{15, 5}, {40, 10}, {10, 20}, {5, 10}, {15, 5}},
+				{{30, 20}, {45, 40}, {10, 40}, {30, 20}}}},
 			DocShapeVertices: [][][]float64{{{45, 40}, {10, 40}}, {{45, 40}, {10, 40}, {30, 12}}},
 			DocShapeName:     "multilinestring1",
 			Expected:         nil,
@@ -967,8 +967,8 @@ func TestMultiPolygonWithin(t *testing.T) {
 		QueryType        string
 	}{
 		{
-			QueryShape: [][][][]float64{{{{16, 6}, {41, 11}, {11, 21}, {6, 11}, {16, 6}}},
-				{{{31, 21}, {46, 41}, {11, 41}, {31, 21}}}},
+			QueryShape: [][][][]float64{{{{16, 6}, {41, 11}, {11, 21}, {6, 11}, {16, 6}},
+				{{31, 21}, {46, 41}, {11, 41}, {31, 21}}}},
 			DocShapeVertices: [][][][]float64{{{{31, 21}, {46, 41}, {11, 41}, {31, 21}}}},
 			DocShapeName:     "multipolygon1",
 			Expected:         []string{"multipolygon1"},
@@ -976,8 +976,8 @@ func TestMultiPolygonWithin(t *testing.T) {
 			QueryType:        "within",
 		},
 		{
-			QueryShape: [][][][]float64{{{{16, 6}, {41, 11}, {11, 21}, {6, 11}, {16, 6}}},
-				{{{31, 21}, {46, 41}, {11, 41}, {31, 21}}}},
+			QueryShape: [][][][]float64{{{{16, 6}, {41, 11}, {11, 21}, {6, 11}, {16, 6}},
+				{{31, 21}, {46, 41}, {11, 41}, {31, 21}}}},
 			DocShapeVertices: [][][][]float64{{{{31, 21}, {46, 41}, {16, 46}, {31, 21}}}},
 			DocShapeName:     "multipolygon1",
 			Expected:         nil,
