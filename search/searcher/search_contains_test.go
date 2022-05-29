@@ -32,13 +32,13 @@ func TestPointPolygonContains(t *testing.T) {
 			Desc:             "point inside polygon",
 			QueryType:        "contains",
 		},
-		{ // check this one?
+		{
 			QueryShape:       leftRectPoint,
 			DocShapeVertices: nil,
 			DocShapeName:     "",
 			Expected:         nil,
 			Desc:             "empty polygon",
-			QueryType:        "within",
+			QueryType:        "contains",
 		},
 	}
 	i := setupIndex(t)
@@ -88,11 +88,11 @@ func TestPolygonPointContains(t *testing.T) {
 		Desc             string
 		QueryType        string
 	}{
-		{ // check this one?
+		{
 			QueryShape:       rightRect,
 			DocShapeVertices: rightRectPoint,
 			DocShapeName:     "point1",
-			Expected:         nil,
+			Expected:         nil, // nil since point is a non-closed shape
 			Desc:             "point inside polygon",
 			QueryType:        "contains",
 		},
@@ -282,21 +282,21 @@ func TestPolygonMultiPointContains(t *testing.T) {
 		Expected         []string
 		Desc             string
 		QueryType        string
-	}{ // check this one?
+	}{
 		{
 			QueryShape:       leftRect,
 			DocShapeVertices: leftRectEdgeMultiPoint,
 			DocShapeName:     "multipoint1",
-			Expected:         nil,
+			Expected:         nil, // nil since multipoint is a non-closed shape
 			Desc:             "multiple points on polygon edge",
 			QueryType:        "contains",
 		},
-		{ // check this one?
+		{
 			QueryShape:       leftRect,
 			DocShapeVertices: leftRectMultiPoint,
 			DocShapeName:     "multipoint1",
-			Expected:         []string{"multipoint1"},
-			Desc:             "multiple points on polygon edge",
+			Expected:         nil,
+			Desc:             "multiple points, both outside and inside polygon",
 			QueryType:        "contains",
 		},
 		{

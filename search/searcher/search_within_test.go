@@ -376,11 +376,11 @@ func TestMultiPointMultiLinestringWithin(t *testing.T) {
 		Desc             string
 		QueryType        string
 	}{
-		{ // check this one?
+		{
 			QueryShape:       [][]float64{{2, 2}, {2.1, 2.1}},
 			DocShapeVertices: [][][]float64{{{1, 1}, {1.1, 1.1}}, {{2, 2}, {2.1, 2.1}}},
 			DocShapeName:     "multilinestring1",
-			Expected:         []string{"multilinestring1"},
+			Expected:         nil, // nil since multipoint within multiline is always nil
 			Desc:             "multilinestring covering multipoint",
 			QueryType:        "within",
 		},
@@ -530,8 +530,8 @@ func TestPolygonPointWithin(t *testing.T) {
 			QueryType:        "within",
 		},
 		{
-			QueryShape: [][][]float64{{{0, 0}, {1, 0}, {1, 1}, {0, 1}, {0, 0}},
-				{{0.2, 0.2}, {0.2, 0.4}, {0.4, 0.4}, {0.4, 0.2}, {0.2, 0.2}}},
+			QueryShape: [][][]float64{{{0, 0}, {1, 0}, {1, 1}, {0, 1}, {0, 0},
+				{0.2, 0.2}, {0.2, 0.4}, {0.4, 0.4}, {0.4, 0.2}, {0.2, 0.2}}},
 			DocShapeVertices: []float64{0.3, 0.3},
 			DocShapeName:     "point1",
 			Expected:         nil,
@@ -768,7 +768,7 @@ func TestPolygonWithin(t *testing.T) {
 			Desc:             "polygon totally out of range",
 			QueryType:        "within",
 		},
-		{ // check this one
+		{
 			QueryShape:       leftRect,
 			DocShapeVertices: rightRect,
 			DocShapeName:     "polygon1",
@@ -825,8 +825,8 @@ func TestMultiPolygonMultiPointWithin(t *testing.T) {
 		QueryType        string
 	}{
 		{ // check this one
-			QueryShape: [][][][]float64{{{{30, 25}, {45, 40}, {10, 40}, {30, 20}}},
-				{{{15, 5}, {40, 10}, {10, 20}, {5, 10}, {15, 5}}}},
+			QueryShape: [][][][]float64{{{{30, 25}, {45, 40}, {10, 40}, {30, 20}},
+				{{15, 5}, {40, 10}, {10, 20}, {5, 10}, {15, 5}}}},
 			DocShapeVertices: [][]float64{{30, 20}, {15, 5}},
 			DocShapeName:     "multipoint1",
 			Expected:         []string{"multipoint1"},
@@ -834,8 +834,8 @@ func TestMultiPolygonMultiPointWithin(t *testing.T) {
 			QueryType:        "within",
 		},
 		{
-			QueryShape: [][][][]float64{{{{15, 5}, {40, 10}, {10, 20}, {5, 10}, {15, 5}}},
-				{{{30, 20}, {45, 40}, {10, 40}, {30, 20}}}},
+			QueryShape: [][][][]float64{{{{15, 5}, {40, 10}, {10, 20}, {5, 10}, {15, 5}},
+				{{30, 20}, {45, 40}, {10, 40}, {30, 20}}}},
 			DocShapeVertices: [][]float64{{30, 20}, {30, 30}, {45, 66}},
 			DocShapeName:     "multipoint1",
 			Expected:         nil,
@@ -843,8 +843,8 @@ func TestMultiPolygonMultiPointWithin(t *testing.T) {
 			QueryType:        "within",
 		},
 		{
-			QueryShape: [][][][]float64{{{{0, 0}, {1, 0}, {1, 1}, {0, 1}, {0, 0}}},
-				{{{1, 0}, {2, 0}, {2, 1}, {1, 1}, {1, 0}}}},
+			QueryShape: [][][][]float64{{{{0, 0}, {1, 0}, {1, 1}, {0, 1}, {0, 0}},
+				{{1, 0}, {2, 0}, {2, 1}, {1, 1}, {1, 0}}}},
 			DocShapeVertices: [][]float64{{0.5, 0.5}, {1.5, 0.5}},
 			DocShapeName:     "multipoint1",
 			Expected:         []string{"multipoint1"},

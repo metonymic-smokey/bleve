@@ -107,14 +107,15 @@ func TestPointLinestringIntersects(t *testing.T) {
 			Desc:             "point at the vertex of linestring",
 			Expected:         []string{"linestring1"},
 		},
-		{ // check this one
+		{
 			QueryShape:       []float64{1.5, 1.5001714},
 			DocShapeVertices: [][]float64{{0.0, 0.0}, {1.0, 1.0}, {2.0, 2.0}, {3.0, 3.0}},
 			DocShapeName:     "linestring1",
 			Desc:             "point along linestring",
-			Expected:         []string{"linestring1"},
+			Expected:         nil, // nil since point is said to intersect only when it matches any
+			// of the endpoints of the linestring
 		},
-		{ // check this one
+		{
 			QueryShape:       []float64{1.5, 1.6001714},
 			DocShapeVertices: [][]float64{{0.0, 0.0}, {1.0, 1.0}, {2.0, 2.0}, {3.0, 3.0}},
 			DocShapeName:     "linestring1",
@@ -128,7 +129,7 @@ func TestPointLinestringIntersects(t *testing.T) {
 	for _, test := range tests {
 		doc := document.NewDocument(test.DocShapeName)
 		doc.AddField(document.NewGeoShapeFieldWithIndexingOptions("geometry", []uint64{},
-			[][][][]float64{{test.DocShapeVertices}}, "multipoint", document.DefaultGeoShapeIndexingOptions))
+			[][][][]float64{{test.DocShapeVertices}}, "linestring", document.DefaultGeoShapeIndexingOptions))
 		err := i.Update(doc)
 		if err != nil {
 			t.Errorf(err.Error())
@@ -190,12 +191,12 @@ func TestPointPolygonIntersects(t *testing.T) {
 			Desc:             "point inside polygon",
 			Expected:         []string{"polygon1"},
 		},
-		{ // check this one
+		{
 			QueryShape: []float64{0.3, 0.3},
 			DocShapeVertices: [][][]float64{{{0.0, 0.0}, {1.0, 0.0}, {1.0, 1.0}, {0.0, 1.0}, {0.0, 0.0}},
 				{{0.2, 0.2}, {0.2, 0.4}, {0.4, 0.4}, {0.4, 0.2}, {0.2, 0.2}}},
 			DocShapeName: "polygon1",
-			Desc:         "point not intersecting with any hole inside polygon",
+			Desc:         "point inside hole inside polygon",
 			Expected:     nil,
 		},
 	}
@@ -404,12 +405,12 @@ func TestLinestringPolygonIntersects(t *testing.T) {
 			Desc:             "linestring intersects polygon at a vertex",
 			Expected:         []string{"polygon1"},
 		},
-		{ // check this one
+		{
 			QueryShape:       [][]float64{{0.2, 0.2}, {0.4, 0.4}},
 			DocShapeVertices: [][][]float64{{{0.0, 0.0}, {1.0, 0.0}, {1.0, 1.0}, {0.0, 1.0}, {0.0, 0.0}}},
 			DocShapeName:     "polygon1",
 			Desc:             "linestring within polygon",
-			Expected:         []string{"polygon1"},
+			Expected:         nil, // nil since linestring intersects polygon only if it intersects any of the polygons edges
 		},
 		{
 			QueryShape:       [][]float64{{-0.5, 0.5}, {0.5, 0.5}},
