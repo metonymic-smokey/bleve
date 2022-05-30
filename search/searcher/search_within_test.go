@@ -554,14 +554,6 @@ func TestPolygonPointWithin(t *testing.T) {
 			Desc:             "point on polygon vertex edge",
 			QueryType:        "within",
 		},
-		{ // check this one
-			QueryShape:       [][][]float64{{{150, 85}, {-20, -85}, {-30, 85}, {160, -85}, {150, 85}}},
-			DocShapeVertices: []float64{150, 85},
-			DocShapeName:     "point1",
-			Expected:         []string{"point1"},
-			Desc:             "point inside the polygon's latitudinal boundary",
-			QueryType:        "within",
-		},
 		{
 			QueryShape:       [][][]float64{{{150, 85}, {-20, -85}, {-30, 85}, {160, -85}, {150, 85}}},
 			DocShapeVertices: []float64{170, 85},
@@ -825,7 +817,7 @@ func TestMultiPolygonMultiPointWithin(t *testing.T) {
 		QueryType        string
 	}{
 		{ // check this one
-			QueryShape: [][][][]float64{{{{30, 25}, {45, 40}, {10, 40}, {30, 20}},
+			QueryShape: [][][][]float64{{{{30, 25}, {45, 40}, {10, 40}, {30, 20}, {30, 25}},
 				{{15, 5}, {40, 10}, {10, 20}, {5, 10}, {15, 5}}}},
 			DocShapeVertices: [][]float64{{30, 20}, {15, 5}},
 			DocShapeName:     "multipoint1",
