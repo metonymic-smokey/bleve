@@ -876,7 +876,7 @@ func TestMultiPolygonIntersects(t *testing.T) {
 	}{
 		{
 			QueryShape: [][][][]float64{{{{15, 5}, {40, 10}, {10, 20},
-				{5, 10}, {15, 5}}, {{30, 20}, {45, 40}, {10, 40}, {30, 20}}}},
+				{5, 10}, {15, 5}}}, {{{30, 20}, {45, 40}, {10, 40}, {30, 20}}}},
 			DocShapeVertices: [][][][]float64{{{{0.0, 0.0}, {1.0, 0.0}, {1.0, 1.0},
 				{0.0, 1.0}, {0.0, 0.0}}, {{30, 20}, {45, 40}, {10, 40}, {30, 20}}}},
 			DocShapeName: "multipolygon1",
@@ -885,7 +885,7 @@ func TestMultiPolygonIntersects(t *testing.T) {
 		},
 		{
 			QueryShape: [][][][]float64{{{{15, 5}, {40, 10}, {10, 20},
-				{5, 10}, {15, 5}}, {{30, 20}, {45, 40}, {10, 40}, {30, 20}}}},
+				{5, 10}, {15, 5}}}, {{{30, 20}, {45, 40}, {10, 40}, {30, 20}}}},
 			DocShapeVertices: [][][][]float64{{{{0.0, 0.0}, {1.0, 0.0}, {1.0, 1.0},
 				{0.0, 1.0}, {0.0, 0.0}}}},
 			DocShapeName: "multipolygon1",
@@ -940,16 +940,16 @@ func TestMultiPolygonMultiPointIntersects(t *testing.T) {
 		Expected         []string
 	}{
 		{ // check this one
-			QueryShape: [][][][]float64{{{{30, 20}, {45, 40}, {10, 40}, {30, 20}},
-				{{15, 5}, {40, 10}, {10, 20}, {5, 10}, {15, 5}}}},
+			QueryShape: [][][][]float64{{{{30, 20}, {45, 40}, {10, 40}, {30, 20}}},
+				{{{15, 5}, {40, 10}, {10, 20}, {5, 10}, {15, 5}}}},
 			DocShapeVertices: [][]float64{{30, 20}, {30, 30}},
 			DocShapeName:     "multipoint1",
 			Desc:             "multipolygon intersects multipoint",
 			Expected:         []string{"multipoint1"},
 		},
 		{
-			QueryShape: [][][][]float64{{{{15, 5}, {40, 10}, {10, 20}, {5, 10}, {15, 5}},
-				{{30, 20}, {45, 50}, {10, 50}, {30, 20}}}},
+			QueryShape: [][][][]float64{{{{15, 5}, {40, 10}, {10, 20}, {5, 10}, {15, 5}}},
+				{{{30, 20}, {45, 50}, {10, 50}, {30, 20}}}},
 			DocShapeVertices: [][]float64{{30, -20}, {-30, 30}, {45, 66}},
 			DocShapeName:     "multipoint1",
 			Desc:             "multipolygon does not intersect multipoint",
@@ -1003,14 +1003,14 @@ func TestMultiPolygonMultiLinestringIntersects(t *testing.T) {
 		Expected         []string
 	}{
 		{
-			QueryShape:       [][][][]float64{{{{15, 5}, {40, 10}, {10, 20}, {5, 10}, {15, 5}}, {{30, 20}, {45, 40}, {10, 40}, {30, 20}}}},
+			QueryShape:       [][][][]float64{{{{15, 5}, {40, 10}, {10, 20}, {5, 10}, {15, 5}}}, {{{30, 20}, {45, 40}, {10, 40}, {30, 20}}}},
 			DocShapeVertices: [][][]float64{{{65, 40}, {60, 40}}, {{45, 40}, {10, 40}, {30, 20}}},
 			DocShapeName:     "multilinestring1",
 			Desc:             "multipolygon intersects multilinestring",
 			Expected:         []string{"multilinestring1"},
 		},
 		{
-			QueryShape:       [][][][]float64{{{{15, 5}, {40, 10}, {10, 20}, {5, 10}, {15, 5}}, {{30, 20}, {45, 40}, {10, 40}, {30, 20}}}},
+			QueryShape:       [][][][]float64{{{{15, 5}, {40, 10}, {10, 20}, {5, 10}, {15, 5}}}, {{{30, 20}, {45, 40}, {10, 40}, {30, 20}}}},
 			DocShapeVertices: [][][]float64{{{45, 41}, {60, 80}}, {{-45, -40}, {-10, -40}}},
 			DocShapeName:     "multilinestring1",
 			Desc:             "multipolygon does not intersect multilinestring",

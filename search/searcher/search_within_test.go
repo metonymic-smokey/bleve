@@ -539,7 +539,7 @@ func TestPolygonPointWithin(t *testing.T) {
 			QueryType:        "within",
 		},
 		{
-			QueryShape:       [][][]float64{{{0, 0}, {1, 0}, {1, 1}, {0, 1}, {0, 0}}},
+			QueryShape:       [][][]float64{{{0.0, 0.0}, {1.0, 0.0}, {1.0, 1.0}, {0.0, 1.0}, {0.0, 0.0}}},
 			DocShapeVertices: []float64{1.0, 0.0},
 			DocShapeName:     "point1",
 			Expected:         []string{"point1"},
@@ -551,7 +551,7 @@ func TestPolygonPointWithin(t *testing.T) {
 			DocShapeVertices: []float64{1.5, 1.5001714},
 			DocShapeName:     "point1",
 			Expected:         []string{"point1"},
-			Desc:             "point on polygon vertex edge",
+			Desc:             "point inside polygon",
 			QueryType:        "within",
 		},
 		{
@@ -817,8 +817,8 @@ func TestMultiPolygonMultiPointWithin(t *testing.T) {
 		QueryType        string
 	}{
 		{ // check this one
-			QueryShape: [][][][]float64{{{{30, 25}, {45, 40}, {10, 40}, {30, 20}, {30, 25}},
-				{{15, 5}, {40, 10}, {10, 20}, {5, 10}, {15, 5}}}},
+			QueryShape: [][][][]float64{{{{30, 25}, {45, 40}, {10, 40}, {30, 20}, {30, 25}}},
+				{{{15, 5}, {40, 10}, {10, 20}, {5, 10}, {15, 5}}}},
 			DocShapeVertices: [][]float64{{30, 20}, {15, 5}},
 			DocShapeName:     "multipoint1",
 			Expected:         []string{"multipoint1"},
@@ -826,8 +826,8 @@ func TestMultiPolygonMultiPointWithin(t *testing.T) {
 			QueryType:        "within",
 		},
 		{
-			QueryShape: [][][][]float64{{{{15, 5}, {40, 10}, {10, 20}, {5, 10}, {15, 5}},
-				{{30, 20}, {45, 40}, {10, 40}, {30, 20}}}},
+			QueryShape: [][][][]float64{{{{15, 5}, {40, 10}, {10, 20}, {5, 10}, {15, 5}}},
+				{{{30, 20}, {45, 40}, {10, 40}, {30, 20}}}},
 			DocShapeVertices: [][]float64{{30, 20}, {30, 30}, {45, 66}},
 			DocShapeName:     "multipoint1",
 			Expected:         nil,
@@ -835,8 +835,8 @@ func TestMultiPolygonMultiPointWithin(t *testing.T) {
 			QueryType:        "within",
 		},
 		{
-			QueryShape: [][][][]float64{{{{0, 0}, {1, 0}, {1, 1}, {0, 1}, {0, 0}},
-				{{1, 0}, {2, 0}, {2, 1}, {1, 1}, {1, 0}}}},
+			QueryShape: [][][][]float64{{{{0, 0}, {1, 0}, {1, 1}, {0, 1}, {0, 0}}},
+				{{{1, 0}, {2, 0}, {2, 1}, {1, 1}, {1, 0}}}},
 			DocShapeVertices: [][]float64{{0.5, 0.5}, {1.5, 0.5}},
 			DocShapeName:     "multipoint1",
 			Expected:         []string{"multipoint1"},
@@ -893,8 +893,8 @@ func TestMultiPolygonMultiLinestringWithin(t *testing.T) {
 		QueryType        string
 	}{
 		{
-			QueryShape: [][][][]float64{{{{15, 5}, {40, 10}, {10, 20}, {5, 10}, {15, 5}},
-				{{30, 20}, {45, 40}, {10, 40}, {30, 20}}}},
+			QueryShape: [][][][]float64{{{{15, 5}, {40, 10}, {10, 20}, {5, 10}, {15, 5}}},
+				{{{30, 20}, {45, 40}, {10, 40}, {30, 20}}}},
 			DocShapeVertices: [][][]float64{{{45, 40}, {10, 40}}, {{45, 40}, {10, 40}, {30, 20}}},
 			DocShapeName:     "multilinestring1",
 			Expected:         nil,
@@ -902,8 +902,8 @@ func TestMultiPolygonMultiLinestringWithin(t *testing.T) {
 			QueryType:        "within",
 		},
 		{
-			QueryShape: [][][][]float64{{{{15, 5}, {40, 10}, {10, 20}, {5, 10}, {15, 5}},
-				{{30, 20}, {45, 40}, {10, 40}, {30, 20}}}},
+			QueryShape: [][][][]float64{{{{15, 5}, {40, 10}, {10, 20}, {5, 10}, {15, 5}}},
+				{{{30, 20}, {45, 40}, {10, 40}, {30, 20}}}},
 			DocShapeVertices: [][][]float64{{{45, 40}, {10, 40}}, {{45, 40}, {10, 40}, {30, 12}}},
 			DocShapeName:     "multilinestring1",
 			Expected:         nil,
@@ -959,8 +959,8 @@ func TestMultiPolygonWithin(t *testing.T) {
 		QueryType        string
 	}{
 		{
-			QueryShape: [][][][]float64{{{{16, 6}, {41, 11}, {11, 21}, {6, 11}, {16, 6}},
-				{{31, 21}, {46, 41}, {11, 41}, {31, 21}}}},
+			QueryShape: [][][][]float64{{{{16, 6}, {41, 11}, {11, 21}, {6, 11}, {16, 6}}},
+				{{{31, 21}, {46, 41}, {11, 41}, {31, 21}}}},
 			DocShapeVertices: [][][][]float64{{{{31, 21}, {46, 41}, {11, 41}, {31, 21}}}},
 			DocShapeName:     "multipolygon1",
 			Expected:         []string{"multipolygon1"},
@@ -968,8 +968,8 @@ func TestMultiPolygonWithin(t *testing.T) {
 			QueryType:        "within",
 		},
 		{
-			QueryShape: [][][][]float64{{{{16, 6}, {41, 11}, {11, 21}, {6, 11}, {16, 6}},
-				{{31, 21}, {46, 41}, {11, 41}, {31, 21}}}},
+			QueryShape: [][][][]float64{{{{16, 6}, {41, 11}, {11, 21}, {6, 11}, {16, 6}}},
+				{{{31, 21}, {46, 41}, {11, 41}, {31, 21}}}},
 			DocShapeVertices: [][][][]float64{{{{31, 21}, {46, 41}, {16, 46}, {31, 21}}}},
 			DocShapeName:     "multipolygon1",
 			Expected:         nil,
