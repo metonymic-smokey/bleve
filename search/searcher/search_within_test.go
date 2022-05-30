@@ -496,6 +496,65 @@ func TestLinestringWithin(t *testing.T) {
 	}
 }
 
+func TestLinestringGeometryCollectionWithin(t *testing.T) {
+	tests := []struct {
+		QueryShape       [][]float64
+		DocShapeVertices [][][][][]float64
+		DocShapeName     string
+		Expected         []string
+		Desc             string
+		QueryType        string
+		Types            []string
+	}{
+		{
+			// check this one
+			QueryShape:       [][]float64{{1, 1}, {2, 2}},
+			DocShapeVertices: [][][][][]float64{{{{{1, 1}}}}},
+			DocShapeName:     "geometrycollection1",
+			Expected:         []string{"geometrycollection1"},
+			Desc:             "geometry collection with a point",
+			Types:            []string{"point"},
+		},
+	}
+
+	i := setupIndex(t)
+
+	for _, test := range tests {
+		doc := document.NewDocument(test.DocShapeName)
+		doc.AddField(document.NewGeometryCollectionFieldWithIndexingOptions("geometry",
+			[]uint64{}, test.DocShapeVertices, test.Types, document.DefaultGeoShapeIndexingOptions))
+		err := i.Update(doc)
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+
+		indexReader, err := i.Reader()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		t.Run(test.Desc, func(t *testing.T) {
+			got, err := runGeoShapeLinestringIntersectsQuery(test.QueryType,
+				indexReader, test.QueryShape, "geometry")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got, test.Expected) {
+				t.Errorf("expected %v, got %v for linestring: %+v",
+					test.Expected, got, test.QueryShape)
+			}
+		})
+		err = i.Delete(doc.ID())
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+		err = indexReader.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func TestPolygonPointWithin(t *testing.T) {
 	tests := []struct {
 		QueryShape       [][][]float64
