@@ -702,11 +702,10 @@ func TestLinestringGeometryCollectionWithin(t *testing.T) {
 		Types            []string
 	}{
 		{
-			// check this one
-			QueryShape:       [][]float64{{1, 1}, {2, 2}}, // LS is not a closed shape
+			QueryShape:       [][]float64{{1, 1}, {2, 2}},
 			DocShapeVertices: [][][][][]float64{{{{{1, 1}}}}},
 			DocShapeName:     "geometrycollection1",
-			Expected:         []string{"geometrycollection1"},
+			Expected:         nil, // LS is not a closed shape
 			Desc:             "geometry collection with a point",
 			Types:            []string{"point"},
 			QueryType:        "within",

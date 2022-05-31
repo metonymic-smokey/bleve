@@ -203,12 +203,11 @@ func TestEnvelopePolygonContains(t *testing.T) {
 			QueryType:        "contains",
 		},
 		{
-			// check this
 			QueryShape:       [][]float64{{0, 1}, {1, 0}},
 			DocShapeVertices: rightRect,
 			DocShapeName:     "polygon1",
 			Desc:             "polygon coincident with bounded rectangle",
-			Expected:         nil,
+			Expected:         []string{"polygon1"},
 			QueryType:        "contains",
 		},
 	}
