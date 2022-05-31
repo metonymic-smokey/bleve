@@ -146,6 +146,201 @@ func TestMultiPointWithin(t *testing.T) {
 	}
 }
 
+func TestEnvelopePointWithin(t *testing.T) {
+	tests := []struct {
+		QueryShape       [][]float64
+		DocShapeVertices []float64
+		DocShapeName     string
+		Desc             string
+		Expected         []string
+		QueryType        string
+	}{
+		{
+			QueryShape:       [][]float64{{0, 1}, {1, 0}},
+			DocShapeVertices: []float64{0.5, 0.5},
+			DocShapeName:     "point1",
+			Desc:             "point completely within bounded rectangle",
+			Expected:         []string{"point1"},
+			QueryType:        "within",
+		},
+		{
+			QueryShape:       [][]float64{{0, 1}, {1, 0}},
+			DocShapeVertices: []float64{0, 1},
+			DocShapeName:     "point1",
+			Desc:             "point on vertex of bounded rectangle",
+			Expected:         []string{"point1"},
+			QueryType:        "within",
+		},
+		{
+			QueryShape:       [][]float64{{0, 1}, {1, 0}},
+			DocShapeVertices: []float64{10, 11},
+			DocShapeName:     "point1",
+			Desc:             "point outside bounded rectangle",
+			Expected:         nil,
+			QueryType:        "within",
+		},
+	}
+
+	i := setupIndex(t)
+
+	for _, test := range tests {
+		doc := document.NewDocument(test.DocShapeName)
+		doc.AddField(document.NewGeoShapeFieldWithIndexingOptions("geometry", []uint64{},
+			[][][][]float64{{{test.DocShapeVertices}}}, "point", document.DefaultGeoShapeIndexingOptions))
+		err := i.Update(doc)
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+
+		indexReader, err := i.Reader()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		t.Run(test.Desc, func(t *testing.T) {
+			got, err := runGeoShapeEnvelopeRelationQuery(test.QueryType,
+				indexReader, test.QueryShape, "geometry")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got, test.Expected) {
+				t.Errorf("expected %v, got %v for Envelope: %+v",
+					test.Expected, got, test.QueryShape)
+			}
+		})
+	}
+}
+
+func TestEnvelopeLinestringWithin(t *testing.T) {
+	tests := []struct {
+		QueryShape       [][]float64
+		DocShapeVertices [][]float64
+		DocShapeName     string
+		Desc             string
+		Expected         []string
+		QueryType        string
+	}{
+		{
+			QueryShape:       [][]float64{{0, 1}, {1, 0}},
+			DocShapeVertices: [][]float64{{0.5, 0.5}, {0.75, 0.75}},
+			DocShapeName:     "linestring1",
+			Desc:             "linestring completely within bounded rectangle",
+			Expected:         []string{"linestring1"},
+			QueryType:        "within",
+		},
+		{
+			QueryShape:       [][]float64{{0, 1}, {1, 0}},
+			DocShapeVertices: [][]float64{{0.5, 0.5}, {1.75, 1.75}},
+			DocShapeName:     "linestring1",
+			Desc:             "linestring partially within bounded rectangle",
+			Expected:         nil,
+			QueryType:        "within",
+		},
+		{
+			QueryShape:       [][]float64{{0, 1}, {1, 0}},
+			DocShapeVertices: [][]float64{{1.5, 2.5}, {2.75, 2.75}},
+			DocShapeName:     "linestring1",
+			Desc:             "linestring completely outside bounded rectangle",
+			Expected:         nil,
+			QueryType:        "within",
+		},
+	}
+
+	i := setupIndex(t)
+
+	for _, test := range tests {
+		doc := document.NewDocument(test.DocShapeName)
+		doc.AddField(document.NewGeoShapeFieldWithIndexingOptions("geometry", []uint64{},
+			[][][][]float64{{test.DocShapeVertices}}, "linestring", document.DefaultGeoShapeIndexingOptions))
+		err := i.Update(doc)
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+
+		indexReader, err := i.Reader()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		t.Run(test.Desc, func(t *testing.T) {
+			got, err := runGeoShapeEnvelopeRelationQuery(test.QueryType,
+				indexReader, test.QueryShape, "geometry")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got, test.Expected) {
+				t.Errorf("expected %v, got %v for Envelope: %+v",
+					test.Expected, got, test.QueryShape)
+			}
+		})
+	}
+}
+
+func TestEnvelopePolygonWithin(t *testing.T) {
+	tests := []struct {
+		QueryShape       [][]float64
+		DocShapeVertices [][][]float64
+		DocShapeName     string
+		Desc             string
+		Expected         []string
+		QueryType        string
+	}{
+		{
+			QueryShape:       [][]float64{{0, 1}, {1, 0}},
+			DocShapeVertices: [][][]float64{{{0.5, 0.5}, {1, 0.5}, {1, 1}, {0.5, 1}, {0.5, 0.5}}},
+			DocShapeName:     "polygon1",
+			Desc:             "polygon completely within bounded rectangle",
+			Expected:         []string{"polygon1"},
+			QueryType:        "within",
+		},
+		{
+			QueryShape:       [][]float64{{0, 1}, {1, 0}},
+			DocShapeVertices: [][][]float64{{{0.5, 0.5}, {1.5, 0.5}, {1.5, 1.5}, {0.5, 1.5}, {0.5, 0.5}}},
+			DocShapeName:     "polygon1",
+			Desc:             "polygon partially within bounded rectangle",
+			Expected:         nil,
+			QueryType:        "within",
+		},
+		{
+			QueryShape:       [][]float64{{0, 1}, {1, 0}},
+			DocShapeVertices: [][][]float64{{{10.5, 10.5}, {11.5, 10.5}, {11.5, 11.5}, {10.5, 11.5}, {10.5, 10.5}}},
+			DocShapeName:     "polygon1",
+			Desc:             "polygon completely outside bounded rectangle",
+			Expected:         nil,
+			QueryType:        "within",
+		},
+	}
+
+	i := setupIndex(t)
+
+	for _, test := range tests {
+		doc := document.NewDocument(test.DocShapeName)
+		doc.AddField(document.NewGeoShapeFieldWithIndexingOptions("geometry", []uint64{},
+			[][][][]float64{test.DocShapeVertices}, "polygon", document.DefaultGeoShapeIndexingOptions))
+		err := i.Update(doc)
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+
+		indexReader, err := i.Reader()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		t.Run(test.Desc, func(t *testing.T) {
+			got, err := runGeoShapeEnvelopeRelationQuery(test.QueryType,
+				indexReader, test.QueryShape, "geometry")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got, test.Expected) {
+				t.Errorf("expected %v, got %v for Envelope: %+v",
+					test.Expected, got, test.QueryShape)
+			}
+		})
+	}
+}
+
 func TestPointLinestringWithin(t *testing.T) {
 	tests := []struct {
 		QueryShape       []float64
