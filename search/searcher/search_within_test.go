@@ -508,13 +508,15 @@ func TestLinestringGeometryCollectionWithin(t *testing.T) {
 	}{
 		{
 			// check this one
-			QueryShape:       [][]float64{{1, 1}, {2, 2}},
+			QueryShape:       [][]float64{{1, 1}, {2, 2}}, // LS is not a closed shape
 			DocShapeVertices: [][][][][]float64{{{{{1, 1}}}}},
 			DocShapeName:     "geometrycollection1",
 			Expected:         []string{"geometrycollection1"},
 			Desc:             "geometry collection with a point",
 			Types:            []string{"point"},
+			QueryType:        "within",
 		},
+		{},
 	}
 
 	i := setupIndex(t)
@@ -630,7 +632,7 @@ func TestPolygonPointWithin(t *testing.T) {
 			Desc:             "point in left rectangle",
 			QueryType:        "within",
 		},
-		{ // check this one
+		{
 			// from binary predicates tests
 			QueryShape:       rightRect,
 			DocShapeVertices: rightRectPoint,
@@ -875,7 +877,7 @@ func TestMultiPolygonMultiPointWithin(t *testing.T) {
 		Desc             string
 		QueryType        string
 	}{
-		{ // check this one
+		{
 			QueryShape: [][][][]float64{{{{30, 25}, {45, 40}, {10, 40}, {30, 20}, {30, 25}}},
 				{{{15, 5}, {40, 10}, {10, 20}, {5, 10}, {15, 5}}}},
 			DocShapeVertices: [][]float64{{30, 20}, {15, 5}},

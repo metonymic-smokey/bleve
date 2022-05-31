@@ -239,6 +239,55 @@ func TestPointPolygonIntersects(t *testing.T) {
 	}
 }
 
+func TestEnvelopePointIntersects(t *testing.T) {
+	tests := []struct {
+		QueryShape       [][]float64
+		DocShapeVertices []float64
+		DocShapeName     string
+		Desc             string
+		Expected         []string
+		QueryType        string
+	}{
+		{
+			QueryShape:       [][]float64{{0, 1}, {1, 0}},
+			DocShapeVertices: rightRectPoint,
+			DocShapeName:     "point1",
+			Desc:             "point on vertex of bounded rectangle",
+			Expected:         []string{"point1"},
+			QueryType:        "intersects",
+		},
+	}
+
+	i := setupIndex(t)
+
+	for _, test := range tests {
+		doc := document.NewDocument(test.DocShapeName)
+		doc.AddField(document.NewGeoShapeFieldWithIndexingOptions("geometry", []uint64{},
+			[][][][]float64{{{test.DocShapeVertices}}}, "point", document.DefaultGeoShapeIndexingOptions))
+		err := i.Update(doc)
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+
+		indexReader, err := i.Reader()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		t.Run(test.Desc, func(t *testing.T) {
+			got, err := runGeoShapeEnvelopeRelationQuery(test.QueryType,
+				indexReader, test.QueryShape, "geometry")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got, test.Expected) {
+				t.Errorf("expected %v, got %v for Envelope: %+v",
+					test.Expected, got, test.QueryShape)
+			}
+		})
+	}
+}
+
 func TestMultiPointIntersects(t *testing.T) {
 	tests := []struct {
 		QueryShape       [][]float64
@@ -939,7 +988,7 @@ func TestMultiPolygonMultiPointIntersects(t *testing.T) {
 		Desc             string
 		Expected         []string
 	}{
-		{ // check this one
+		{
 			QueryShape: [][][][]float64{{{{30, 20}, {45, 40}, {10, 40}, {30, 20}}},
 				{{{15, 5}, {40, 10}, {10, 20}, {5, 10}, {15, 5}}}},
 			DocShapeVertices: [][]float64{{30, 20}, {30, 30}},
