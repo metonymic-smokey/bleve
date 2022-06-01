@@ -77,7 +77,69 @@ func TestPointIntersects(t *testing.T) {
 				t.Errorf(err.Error())
 			}
 			if !reflect.DeepEqual(got, test.Expected) {
-				t.Errorf("expected %v, got %v for polygon: %+v",
+				t.Errorf("expected %v, got %v for point: %+v",
+					test.Expected, got, test.QueryShape)
+			}
+		})
+		err = i.Delete(doc.ID())
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+		err = indexReader.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestPointMultiPointIntersects(t *testing.T) {
+	tests := []struct {
+		QueryShape       []float64
+		DocShapeVertices [][]float64
+		DocShapeName     string
+		Desc             string
+		Expected         []string
+	}{
+		{
+			QueryShape:       []float64{2.0, 2.0},
+			DocShapeVertices: [][]float64{{2.0, 2.0}, {3.0, 2.0}},
+			DocShapeName:     "point1",
+			Desc:             "coincident points",
+			Expected:         []string{"point1"},
+		},
+		{
+			QueryShape:       []float64{2.0, 2.0},
+			DocShapeVertices: [][]float64{{2.0, 2.1}, {3.0, 3.1}},
+			DocShapeName:     "point2",
+			Desc:             "non coincident points",
+			Expected:         nil,
+		},
+	}
+	i := setupIndex(t)
+
+	for _, test := range tests {
+		doc := document.NewDocument(test.DocShapeName)
+		doc.AddField(document.NewGeoShapeFieldWithIndexingOptions("geometry", []uint64{},
+			[][][][]float64{{test.DocShapeVertices}}, "multipoint", document.DefaultGeoShapeIndexingOptions))
+		err := i.Update(doc)
+		if err != nil {
+			t.Error(err)
+		}
+
+		indexReader, err := i.Reader()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// indexing and searching independently for each case.
+		t.Run(test.Desc, func(t *testing.T) {
+			got, err := runGeoShapePointRelationQuery("intersects",
+				false, indexReader, [][]float64{test.QueryShape}, "geometry")
+			if err != nil {
+				t.Errorf(err.Error())
+			}
+			if !reflect.DeepEqual(got, test.Expected) {
+				t.Errorf("expected %v, got %v for point: %+v",
 					test.Expected, got, test.QueryShape)
 			}
 		})
@@ -130,6 +192,76 @@ func TestPointLinestringIntersects(t *testing.T) {
 		doc := document.NewDocument(test.DocShapeName)
 		doc.AddField(document.NewGeoShapeFieldWithIndexingOptions("geometry", []uint64{},
 			[][][][]float64{{test.DocShapeVertices}}, "linestring", document.DefaultGeoShapeIndexingOptions))
+		err := i.Update(doc)
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+
+		indexReader, err := i.Reader()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		t.Run(test.Desc, func(t *testing.T) {
+			got, err := runGeoShapePointRelationQuery("intersects",
+				false, indexReader, [][]float64{test.QueryShape}, "geometry")
+			if err != nil {
+				t.Errorf(err.Error())
+			}
+			if !reflect.DeepEqual(got, test.Expected) {
+				t.Errorf("expected %v, got %v for point: %+v",
+					test.Expected, got, test.QueryShape)
+			}
+		})
+		err = i.Delete(doc.ID())
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+		err = indexReader.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestPointMultiLinestringIntersects(t *testing.T) {
+	tests := []struct {
+		QueryShape       []float64
+		DocShapeVertices [][][]float64
+		DocShapeName     string
+		Desc             string
+		Expected         []string
+	}{
+		{
+			QueryShape:       []float64{3.0, 3.0},
+			DocShapeVertices: [][][]float64{{{2.0, 2.0}, {3.0, 3.0}, {4.0, 4.0}}},
+			DocShapeName:     "linestring1",
+			Desc:             "point at the vertex of linestring",
+			Expected:         []string{"linestring1"},
+		},
+		{
+			QueryShape:       []float64{1.5, 1.5001714},
+			DocShapeVertices: [][][]float64{{{0.0, 0.0}, {1.0, 1.0}, {2.0, 2.0}, {3.0, 3.0}}},
+			DocShapeName:     "linestring1",
+			Desc:             "point along a linestring",
+			Expected:         nil, // nil since point is said to intersect only when it matches any
+			// of the endpoints of any of the linestrings
+		},
+		{
+			QueryShape:       []float64{1.5, 1.6001714},
+			DocShapeVertices: [][][]float64{{{0.0, 0.0}, {1.0, 1.0}, {2.0, 2.0}, {3.0, 3.0}}, {{1, 1.1}, {2, 2.1}, {3, 3.4}}},
+			DocShapeName:     "linestring1",
+			Desc:             "point outside all linestrings",
+			Expected:         nil,
+		},
+	}
+
+	i := setupIndex(t)
+
+	for _, test := range tests {
+		doc := document.NewDocument(test.DocShapeName)
+		doc.AddField(document.NewGeoShapeFieldWithIndexingOptions("geometry", []uint64{},
+			[][][][]float64{test.DocShapeVertices}, "multilinestring", document.DefaultGeoShapeIndexingOptions))
 		err := i.Update(doc)
 		if err != nil {
 			t.Errorf(err.Error())
@@ -239,6 +371,84 @@ func TestPointPolygonIntersects(t *testing.T) {
 	}
 }
 
+func TestPointMultiPolygonIntersects(t *testing.T) {
+	tests := []struct {
+		QueryShape       []float64
+		DocShapeVertices [][][][]float64
+		DocShapeName     string
+		Desc             string
+		Expected         []string
+	}{
+		{
+			QueryShape:       []float64{3.0, 3.0},
+			DocShapeVertices: [][][][]float64{{{{2.0, 2.0}, {3.0, 3.0}, {1.0, 3.0}, {2.0, 2.0}}}},
+			DocShapeName:     "multipolygon1",
+			Desc:             "point on a polygon vertex",
+			Expected:         []string{"multipolygon1"},
+		},
+		{
+			QueryShape:       []float64{1.5, 1.500714},
+			DocShapeVertices: [][][][]float64{{{{1.0, 1.0}, {2.0, 2.0}, {0.0, 2.0}, {1.0, 1.0}}}},
+			DocShapeName:     "multipolygon1",
+			Desc:             "point on polygon edge",
+			Expected:         []string{"multipolygon1"},
+		},
+		{
+			QueryShape: []float64{1.5, 1.9},
+			DocShapeVertices: [][][][]float64{{{{1.0, 1.0}, {2.0, 2.0}, {0.0, 2.0}, {1.0, 1.0}}},
+				{{{1.5, 1.9}, {2.5, 2.9}, {0.5, 2.9}, {1.5, 1.9}}}},
+			DocShapeName: "multipolygon1",
+			Desc:         "point inside a polygon and on vertex of another polygon",
+			Expected:     []string{"multipolygon1"},
+		},
+		{
+			QueryShape: []float64{0.3, 0.3},
+			DocShapeVertices: [][][][]float64{{{{0.0, 0.0}, {1.0, 0.0}, {1.0, 1.0}, {0.0, 1.0}, {0.0, 0.0}},
+				{{0.2, 0.2}, {0.2, 0.4}, {0.4, 0.4}, {0.4, 0.2}, {0.2, 0.2}}}},
+			DocShapeName: "multipolygon1",
+			Desc:         "point inside hole inside one of the polygons",
+			Expected:     nil,
+		},
+	}
+
+	i := setupIndex(t)
+
+	for _, test := range tests {
+		doc := document.NewDocument(test.DocShapeName)
+		doc.AddField(document.NewGeoShapeFieldWithIndexingOptions("geometry", []uint64{},
+			test.DocShapeVertices, "multipolygon", document.DefaultGeoShapeIndexingOptions))
+		err := i.Update(doc)
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+
+		indexReader, err := i.Reader()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		t.Run(test.Desc, func(t *testing.T) {
+			got, err := runGeoShapePointRelationQuery("intersects",
+				false, indexReader, [][]float64{test.QueryShape}, "geometry")
+			if err != nil {
+				t.Errorf(err.Error())
+			}
+			if !reflect.DeepEqual(got, test.Expected) {
+				t.Errorf("expected %v, got %v for point: %+v",
+					test.Expected, got, test.QueryShape)
+			}
+		})
+		err = i.Delete(doc.ID())
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+		err = indexReader.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func TestEnvelopePointIntersects(t *testing.T) {
 	tests := []struct {
 		QueryShape       [][]float64
@@ -254,6 +464,14 @@ func TestEnvelopePointIntersects(t *testing.T) {
 			DocShapeName:     "point1",
 			Desc:             "point on vertex of bounded rectangle",
 			Expected:         []string{"point1"},
+			QueryType:        "intersects",
+		},
+		{
+			QueryShape:       [][]float64{{0, 1}, {1, 0}},
+			DocShapeVertices: []float64{10, 10},
+			DocShapeName:     "point1",
+			Desc:             "point outside bounded rectangle",
+			Expected:         nil,
 			QueryType:        "intersects",
 		},
 	}
@@ -840,7 +1058,7 @@ func TestMultiLinestringMultiPointIntersects(t *testing.T) {
 			QueryShape:       [][][]float64{{{2.0, 2.0}, {2.1, 2.1}}, {{3.0, 3.0}, {3.1, 3.1}}},
 			DocShapeVertices: [][]float64{{56.0, 56.0}, {66, 66}},
 			DocShapeName:     "multipoint1",
-			Desc:             "multilinestring intersects one of the multipoints",
+			Desc:             "multilinestring does not intersect any of the multipoints",
 			Expected:         nil,
 		},
 	}
@@ -1115,7 +1333,7 @@ func TestMultiPolygonMultiPointIntersects(t *testing.T) {
 				{{{15, 5}, {40, 10}, {10, 20}, {5, 10}, {15, 5}}}},
 			DocShapeVertices: [][]float64{{30, 20}, {30, 30}},
 			DocShapeName:     "multipoint1",
-			Desc:             "multipolygon intersects multipoint",
+			Desc:             "multipolygon intersects multipoint at the vertex",
 			Expected:         []string{"multipoint1"},
 		},
 		{
