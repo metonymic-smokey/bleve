@@ -1451,6 +1451,7 @@ func TestGeometryCollectionIntersects(t *testing.T) {
 		DocShapeName     string
 		Desc             string
 		Expected         []string
+		Types            []string
 	}{
 		{
 			QueryShape:       nil,
@@ -1458,6 +1459,7 @@ func TestGeometryCollectionIntersects(t *testing.T) {
 			DocShapeName:     "geometrycollection1",
 			Desc:             "empty geometry collections",
 			Expected:         nil,
+			Types:            nil,
 		},
 	}
 
@@ -1466,7 +1468,7 @@ func TestGeometryCollectionIntersects(t *testing.T) {
 	for _, test := range tests {
 		doc := document.NewDocument(test.DocShapeName)
 		doc.AddField(document.NewGeometryCollectionFieldWithIndexingOptions("geometry",
-			[]uint64{}, test.DocShapeVertices, nil, document.DefaultGeoShapeIndexingOptions))
+			[]uint64{}, test.DocShapeVertices, test.Types, document.DefaultGeoShapeIndexingOptions))
 		err := i.Update(doc)
 		if err != nil {
 			t.Errorf(err.Error())
@@ -1479,7 +1481,7 @@ func TestGeometryCollectionIntersects(t *testing.T) {
 
 		t.Run(test.Desc, func(t *testing.T) {
 			got, err := runGeoShapeGeometryCollectionRelationQuery("intersects",
-				indexReader, test.QueryShape, nil, "geometry")
+				indexReader, test.QueryShape, test.Types, "geometry")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1500,6 +1502,209 @@ func TestGeometryCollectionIntersects(t *testing.T) {
 }
 
 func TestGeometryCollectionPointIntersects(t *testing.T) {
+	tests := []struct {
+		QueryShape       [][][][][]float64
+		DocShapeVertices []float64
+		DocShapeName     string
+		Desc             string
+		Expected         []string
+		Types            []string
+	}{
+		{
+			QueryShape:       [][][][][]float64{{{{{4, 5}}}}},
+			DocShapeVertices: []float64{4, 5},
+			DocShapeName:     "point1",
+			Desc:             "point coincident with point in geometry collection",
+			Expected:         []string{"point1"},
+			Types:            []string{"point"},
+		},
+		{
+			QueryShape:       [][][][][]float64{{{{{4, 5}, {6, 7}}}}},
+			DocShapeVertices: []float64{4, 5},
+			DocShapeName:     "point1",
+			Desc:             "point on vertex of linestring in geometry collection",
+			Expected:         []string{"point1"},
+			Types:            []string{"linestring"},
+		},
+		{
+			QueryShape:       [][][][][]float64{{{{{1, 1}, {2, 2}, {0, 2}, {1, 0}}, {{5, 6}}}}},
+			DocShapeVertices: []float64{1.5, 1.9},
+			DocShapeName:     "point1",
+			Desc:             "point inside polygon in geometry collection",
+			Expected:         []string{"point1"},
+			Types:            []string{"polygon", "point"},
+		},
+	}
+
+	i := setupIndex(t)
+
+	for _, test := range tests {
+		doc := document.NewDocument(test.DocShapeName)
+		doc.AddField(document.NewGeoShapeFieldWithIndexingOptions("geometry", []uint64{},
+			[][][][]float64{{{test.DocShapeVertices}}}, "point", document.DefaultGeoShapeIndexingOptions))
+		err := i.Update(doc)
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+
+		indexReader, err := i.Reader()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		t.Run(test.Desc, func(t *testing.T) {
+			got, err := runGeoShapeGeometryCollectionRelationQuery("intersects",
+				indexReader, test.QueryShape, test.Types, "geometry")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got, test.Expected) {
+				t.Errorf("expected %v, got %v for geometry collection: %+v",
+					test.Expected, got, test.QueryShape)
+			}
+		})
+		err = i.Delete(doc.ID())
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+		err = indexReader.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestGeometryCollectionLinestringIntersects(t *testing.T) {
+	tests := []struct {
+		QueryShape       [][][][][]float64
+		DocShapeVertices [][]float64
+		DocShapeName     string
+		Desc             string
+		Expected         []string
+		Types            []string
+	}{
+		{
+			QueryShape:       [][][][][]float64{{{{{4, 5}, {6, 7}, {7, 8}}}}},
+			DocShapeVertices: [][]float64{{6, 7}, {7, 8}},
+			DocShapeName:     "linestring1",
+			Desc:             "linestring intersecting with linestring in geometry collection",
+			Expected:         []string{"linestring1"},
+			Types:            []string{"linestring"},
+		},
+		{
+			QueryShape:       [][][][][]float64{{{{{1.5, 1.9}}}}},
+			DocShapeVertices: [][]float64{{1.5, 1.9}, {2.5, 2.8}},
+			DocShapeName:     "linestring1",
+			Desc:             "linestring intersects point in geometry collection at vertex",
+			Expected:         []string{"linestring1"},
+			Types:            []string{"point"},
+		},
+	}
+
+	i := setupIndex(t)
+
+	for _, test := range tests {
+		doc := document.NewDocument(test.DocShapeName)
+		doc.AddField(document.NewGeoShapeFieldWithIndexingOptions("geometry", []uint64{},
+			[][][][]float64{{test.DocShapeVertices}}, "linestring", document.DefaultGeoShapeIndexingOptions))
+		err := i.Update(doc)
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+
+		indexReader, err := i.Reader()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		t.Run(test.Desc, func(t *testing.T) {
+			got, err := runGeoShapeGeometryCollectionRelationQuery("intersects",
+				indexReader, test.QueryShape, test.Types, "geometry")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got, test.Expected) {
+				t.Errorf("expected %v, got %v for geometry collection: %+v",
+					test.Expected, got, test.QueryShape)
+			}
+		})
+		err = i.Delete(doc.ID())
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+		err = indexReader.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestGeometryCollectionPolygonIntersects(t *testing.T) {
+	tests := []struct {
+		QueryShape       [][][][][]float64
+		DocShapeVertices [][][]float64
+		DocShapeName     string
+		Desc             string
+		Expected         []string
+		Types            []string
+	}{
+		{
+			QueryShape:       [][][][][]float64{{{{{4, 5}, {6, 7}, {7, 8}, {4, 5}}}, {{{1, 2}, {2, 3}, {3, 4}, {1, 2}}}}},
+			DocShapeVertices: [][][]float64{{{4, 5}, {6, 7}, {7, 8}, {4, 5}}},
+			DocShapeName:     "polygon1",
+			Desc:             "polygon coincides with one of the polygons in multipolygon in geometry collection",
+			Expected:         []string{"polygon1"},
+			Types:            []string{"multipolygon"},
+		},
+		{
+			QueryShape:       [][][][][]float64{{{{{14, 15}}}}},
+			DocShapeVertices: [][][]float64{{{4, 5}, {6, 7}, {7, 8}, {4, 5}}},
+			DocShapeName:     "polygon1",
+			Desc:             "polygon does not intersect point in geometry collection",
+			Expected:         nil,
+			Types:            []string{"point"},
+		},
+	}
+
+	i := setupIndex(t)
+
+	for _, test := range tests {
+		doc := document.NewDocument(test.DocShapeName)
+		doc.AddField(document.NewGeoShapeFieldWithIndexingOptions("geometry", []uint64{},
+			[][][][]float64{test.DocShapeVertices}, "polygon", document.DefaultGeoShapeIndexingOptions))
+		err := i.Update(doc)
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+
+		indexReader, err := i.Reader()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		t.Run(test.Desc, func(t *testing.T) {
+			got, err := runGeoShapeGeometryCollectionRelationQuery("intersects",
+				indexReader, test.QueryShape, test.Types, "geometry")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got, test.Expected) {
+				t.Errorf("expected %v, got %v for geometry collection: %+v",
+					test.Expected, got, test.QueryShape)
+			}
+		})
+		err = i.Delete(doc.ID())
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+		err = indexReader.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestPointGeometryCollectionIntersects(t *testing.T) {
 	tests := []struct {
 		QueryShape       []float64
 		DocShapeVertices [][][][][]float64
