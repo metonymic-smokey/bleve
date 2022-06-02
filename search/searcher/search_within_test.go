@@ -706,7 +706,7 @@ func TestLinestringGeometryCollectionWithin(t *testing.T) {
 			DocShapeVertices: [][][][][]float64{{{{{1, 1}}}}},
 			DocShapeName:     "geometrycollection1",
 			Expected:         nil, // LS is not a closed shape
-			Desc:             "geometry collection with a point",
+			Desc:             "geometry collection with a point on vertex of linestring",
 			Types:            []string{"point"},
 			QueryType:        "within",
 		},
@@ -766,14 +766,6 @@ func TestPolygonPointWithin(t *testing.T) {
 			DocShapeName:     "point1",
 			Expected:         []string{"point1"},
 			Desc:             "point within polygon",
-			QueryType:        "within",
-		},
-		{
-			QueryShape:       [][][]float64{{{0, 0}, {1, 0}, {1, 1}, {0, 1}, {0, 0}}},
-			DocShapeVertices: []float64{5.5, 5.5},
-			DocShapeName:     "point1",
-			Expected:         nil,
-			Desc:             "point not within polygon",
 			QueryType:        "within",
 		},
 		{
@@ -1138,6 +1130,63 @@ func TestMultiPolygonMultiPointWithin(t *testing.T) {
 	}
 }
 
+func TestMultiLinestringWithin(t *testing.T) {
+	tests := []struct {
+		QueryShape       [][][]float64
+		DocShapeVertices [][][]float64
+		DocShapeName     string
+		Expected         []string
+		Desc             string
+		QueryType        string
+	}{
+		{
+			QueryShape:       [][][]float64{{{1, 2}, {2, 3}, {3, 4}}, {{5, 6}, {6.5, 7.8}}},
+			DocShapeVertices: [][][]float64{{{1, 2}, {2, 3}, {3, 4}}},
+			DocShapeName:     "multilinestring1",
+			Expected:         nil,
+			Desc:             "multilinestrings with common linestrings",
+			QueryType:        "within",
+		},
+	}
+
+	i := setupIndex(t)
+
+	for _, test := range tests {
+		doc := document.NewDocument(test.DocShapeName)
+		doc.AddField(document.NewGeoShapeFieldWithIndexingOptions("geometry", []uint64{},
+			[][][][]float64{test.DocShapeVertices}, "multilinestring", document.DefaultGeoShapeIndexingOptions))
+		err := i.Update(doc)
+		if err != nil {
+			t.Error(err)
+		}
+
+		indexReader, err := i.Reader()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		t.Run(test.Desc, func(t *testing.T) {
+			got, err := runGeoShapeMultiLinestringIntersectsQuery("within",
+				indexReader, test.QueryShape, "geometry")
+			if err != nil {
+				t.Errorf(err.Error())
+			}
+			if !reflect.DeepEqual(got, test.Expected) {
+				t.Errorf("expected %v, got %v for multilinestring: %+v",
+					test.Expected, got, test.QueryShape)
+			}
+		})
+		err = i.Delete(doc.ID())
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+		err = indexReader.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func TestMultiPolygonMultiLinestringWithin(t *testing.T) {
 	tests := []struct {
 		QueryShape       [][][][]float64
@@ -1278,6 +1327,8 @@ func TestGeometryCollectionWithin(t *testing.T) {
 		Desc             string
 		Expected         []string
 		QueryType        string
+		QueryShapeTypes  []string
+		DocShapeTypes    []string
 	}{
 		{
 			QueryShape:       nil,
@@ -1285,6 +1336,28 @@ func TestGeometryCollectionWithin(t *testing.T) {
 			DocShapeName:     "geometrycollection1",
 			Desc:             "empty geometry collections",
 			Expected:         nil,
+			QueryType:        "within",
+			QueryShapeTypes:  nil,
+			DocShapeTypes:    nil,
+		},
+		{
+			QueryShape:       [][][][][]float64{{{{{1, 2}, {2, 3}}}}},
+			DocShapeVertices: [][][][][]float64{{{{{1, 2}}}}},
+			DocShapeName:     "geometrycollection1",
+			Desc:             "geometry collection with a linestring",
+			Expected:         nil, // linestring in geometry collection does not support within
+			QueryShapeTypes:  []string{"linestring"},
+			DocShapeTypes:    []string{"point"},
+			QueryType:        "within",
+		},
+		{
+			QueryShape:       [][][][][]float64{{{{{1, 2}, {2, 3}, {5, 6}}}}},
+			DocShapeVertices: [][][][][]float64{{{{{1, 2}}}}},
+			DocShapeName:     "geometrycollection1",
+			Desc:             "geometry collections with common points and multipoints",
+			Expected:         []string{"geometrycollection1"},
+			QueryShapeTypes:  []string{"multipoint"},
+			DocShapeTypes:    []string{"point"},
 			QueryType:        "within",
 		},
 	}
@@ -1294,7 +1367,7 @@ func TestGeometryCollectionWithin(t *testing.T) {
 	for _, test := range tests {
 		doc := document.NewDocument(test.DocShapeName)
 		doc.AddField(document.NewGeometryCollectionFieldWithIndexingOptions("geometry",
-			[]uint64{}, test.DocShapeVertices, nil, document.DefaultGeoShapeIndexingOptions))
+			[]uint64{}, test.DocShapeVertices, test.DocShapeTypes, document.DefaultGeoShapeIndexingOptions))
 		err := i.Update(doc)
 		if err != nil {
 			t.Errorf(err.Error())
@@ -1307,7 +1380,7 @@ func TestGeometryCollectionWithin(t *testing.T) {
 
 		t.Run(test.Desc, func(t *testing.T) {
 			got, err := runGeoShapeGeometryCollectionRelationQuery(test.QueryType,
-				indexReader, test.QueryShape, nil, "geometry")
+				indexReader, test.QueryShape, test.QueryShapeTypes, "geometry")
 			if err != nil {
 				t.Fatal(err)
 			}
