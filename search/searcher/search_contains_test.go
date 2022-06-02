@@ -79,6 +79,72 @@ func TestPointPolygonContains(t *testing.T) {
 	}
 }
 
+func TestLinestringPolygonContains(t *testing.T) {
+	tests := []struct {
+		QueryShape       [][]float64
+		DocShapeVertices [][][]float64
+		DocShapeName     string
+		Desc             string
+		Expected         []string
+		QueryType        string
+	}{
+		{ // check this one
+			QueryShape:       [][]float64{{1, 2}, {3, 5}},
+			DocShapeVertices: [][][]float64{{{1, 2}, {3, 5}, {2, 7}, {1, 2}}},
+			DocShapeName:     "polygon1",
+			Desc:             "linestring coinciding with edge of the polygon",
+			Expected:         []string{"polygon1"},
+			QueryType:        "contains",
+		},
+		{
+			// check this one
+			QueryShape:       [][]float64{{1, 0}, {0, 1}},
+			DocShapeVertices: rightRect,
+			DocShapeName:     "polygon1",
+			Desc:             "diagonal of a square",
+			Expected:         []string{"polygon1"},
+			QueryType:        "contains",
+		},
+	}
+
+	i := setupIndex(t)
+
+	for _, test := range tests {
+		doc := document.NewDocument(test.DocShapeName)
+		doc.AddField(document.NewGeoShapeFieldWithIndexingOptions("geometry", []uint64{},
+			[][][][]float64{test.DocShapeVertices}, "polygon", document.DefaultGeoShapeIndexingOptions))
+		err := i.Update(doc)
+		if err != nil {
+			t.Error(err)
+		}
+
+		indexReader, err := i.Reader()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		t.Run(test.Desc, func(t *testing.T) {
+			got, err := runGeoShapeLinestringIntersectsQuery(test.QueryType,
+				indexReader, test.QueryShape, "geometry")
+			if err != nil {
+				t.Errorf(err.Error())
+			}
+			if !reflect.DeepEqual(got, test.Expected) {
+				t.Errorf("expected %v, got %v for linestring: %+v",
+					test.Expected, got, test.QueryShape)
+			}
+		})
+		err = i.Delete(doc.ID())
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+		err = indexReader.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func TestEnvelopePointContains(t *testing.T) {
 	tests := []struct {
 		QueryShape       [][]float64
@@ -315,6 +381,63 @@ func TestPolygonPointContains(t *testing.T) {
 	}
 }
 
+func TestPolygonLinestringContains(t *testing.T) {
+	tests := []struct {
+		QueryShape       [][][]float64
+		DocShapeVertices [][]float64
+		DocShapeName     string
+		Expected         []string
+		Desc             string
+		QueryType        string
+	}{
+		{
+			QueryShape:       rightRect,
+			DocShapeVertices: [][]float64{{1, 0}, {0, 1}},
+			DocShapeName:     "point1",
+			Expected:         nil, // nil since linestring is a non-closed shape
+			Desc:             "diagonal of a square",
+			QueryType:        "contains",
+		},
+	}
+
+	i := setupIndex(t)
+
+	for _, test := range tests {
+		doc := document.NewDocument(test.DocShapeName)
+		doc.AddField(document.NewGeoShapeFieldWithIndexingOptions("geometry", []uint64{},
+			[][][][]float64{{test.DocShapeVertices}}, "linestring", document.DefaultGeoShapeIndexingOptions))
+		err := i.Update(doc)
+		if err != nil {
+			t.Error(err)
+		}
+
+		indexReader, err := i.Reader()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		t.Run(test.Desc, func(t *testing.T) {
+			got, err := runGeoShapePolygonQueryWithRelation(test.QueryType,
+				indexReader, test.QueryShape, "geometry")
+			if err != nil {
+				t.Errorf(err.Error())
+			}
+			if !reflect.DeepEqual(got, test.Expected) {
+				t.Errorf("expected %v, got %v for polygon: %+v",
+					test.Expected, got, test.QueryShape)
+			}
+		})
+		err = i.Delete(doc.ID())
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+		err = indexReader.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func TestMultiPointPolygonContains(t *testing.T) {
 	tests := []struct {
 		QueryShape       [][]float64
@@ -330,6 +453,15 @@ func TestMultiPointPolygonContains(t *testing.T) {
 			DocShapeName:     "polygon1",
 			Expected:         []string{"polygon1"},
 			Desc:             "multi point inside polygon with hole",
+			QueryType:        "contains",
+		},
+		{
+			// check this one
+			QueryShape:       [][]float64{{1, 0.5}},
+			DocShapeVertices: rightRect,
+			DocShapeName:     "polygon1",
+			Expected:         []string{"polygon1"},
+			Desc:             "multi point on polygon edge",
 			QueryType:        "contains",
 		},
 	}
@@ -357,7 +489,138 @@ func TestMultiPointPolygonContains(t *testing.T) {
 				t.Errorf(err.Error())
 			}
 			if !reflect.DeepEqual(got, test.Expected) {
-				t.Errorf("expected %v, got %v for point: %+v",
+				t.Errorf("expected %v, got %v for multipoint: %+v",
+					test.Expected, got, test.QueryShape)
+			}
+		})
+		err = i.Delete(doc.ID())
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+		err = indexReader.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestMultiPointLinestringContains(t *testing.T) {
+	tests := []struct {
+		QueryShape       [][]float64
+		DocShapeVertices [][]float64
+		DocShapeName     string
+		Expected         []string
+		Desc             string
+		QueryType        string
+	}{
+		{
+			// check this one
+			QueryShape:       leftRectEdgeMultiPoint, // [][]float64{{-1, 0.2}, {-0.9, 0.1}}
+			DocShapeVertices: [][]float64{{-1, 0.2}, {-0.9, 0.1}},
+			DocShapeName:     "linestring1",
+			Expected:         []string{"linestring1"},
+			Desc:             "multi point overlaps with all linestring end points",
+			QueryType:        "contains",
+		},
+		{
+			QueryShape:       [][]float64{{-1, 0.2}, {-0.9, 0.1}, {0.5, 0.5}},
+			DocShapeVertices: [][]float64{{-1, 0.2}, {-0.9, 0.1}},
+			DocShapeName:     "linestring1",
+			Expected:         nil,
+			Desc:             "multi point overlaps with some linestring end points",
+			QueryType:        "contains",
+		},
+	}
+
+	i := setupIndex(t)
+
+	for _, test := range tests {
+		doc := document.NewDocument(test.DocShapeName)
+		doc.AddField(document.NewGeoShapeFieldWithIndexingOptions("geometry", []uint64{},
+			[][][][]float64{{test.DocShapeVertices}}, "linestring", document.DefaultGeoShapeIndexingOptions))
+		err := i.Update(doc)
+		if err != nil {
+			t.Error(err)
+		}
+
+		indexReader, err := i.Reader()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		t.Run(test.Desc, func(t *testing.T) {
+			got, err := runGeoShapePointRelationQuery(test.QueryType,
+				true, indexReader, test.QueryShape, "geometry")
+			if err != nil {
+				t.Errorf(err.Error())
+			}
+			if !reflect.DeepEqual(got, test.Expected) {
+				t.Errorf("expected %v, got %v for multipoint: %+v",
+					test.Expected, got, test.QueryShape)
+			}
+		})
+		err = i.Delete(doc.ID())
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+		err = indexReader.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestMultiPointContains(t *testing.T) {
+	tests := []struct {
+		QueryShape       [][]float64
+		DocShapeVertices [][]float64
+		DocShapeName     string
+		Expected         []string
+		Desc             string
+		QueryType        string
+	}{
+		{
+			QueryShape:       leftRectEdgeMultiPoint,
+			DocShapeVertices: [][]float64{{-1, 0.2}, {-0.9, 0.1}},
+			DocShapeName:     "multipoint1",
+			Expected:         []string{"multipoint1"},
+			Desc:             "multi point overlaps with all multi points",
+			QueryType:        "contains",
+		},
+		{
+			QueryShape:       [][]float64{{-1, 0.2}, {-0.9, 0.1}, {0.5, 0.5}},
+			DocShapeVertices: [][]float64{{-1, 0.2}, {-0.9, 0.1}},
+			DocShapeName:     "multipoint1",
+			Expected:         nil,
+			Desc:             "multi point overlaps with some multi points",
+			QueryType:        "contains",
+		},
+	}
+
+	i := setupIndex(t)
+
+	for _, test := range tests {
+		doc := document.NewDocument(test.DocShapeName)
+		doc.AddField(document.NewGeoShapeFieldWithIndexingOptions("geometry", []uint64{},
+			[][][][]float64{{test.DocShapeVertices}}, "multipoint", document.DefaultGeoShapeIndexingOptions))
+		err := i.Update(doc)
+		if err != nil {
+			t.Error(err)
+		}
+
+		indexReader, err := i.Reader()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		t.Run(test.Desc, func(t *testing.T) {
+			got, err := runGeoShapePointRelationQuery(test.QueryType,
+				true, indexReader, test.QueryShape, "geometry")
+			if err != nil {
+				t.Errorf(err.Error())
+			}
+			if !reflect.DeepEqual(got, test.Expected) {
+				t.Errorf("expected %v, got %v for multipoint: %+v",
 					test.Expected, got, test.QueryShape)
 			}
 		})
@@ -490,6 +753,71 @@ func TestPolygonMultiPointContains(t *testing.T) {
 
 		t.Run(test.Desc, func(t *testing.T) {
 			got, err := runGeoShapePolygonQueryWithRelation(test.QueryType,
+				indexReader, test.QueryShape, "geometry")
+			if err != nil {
+				t.Errorf(err.Error())
+			}
+			if !reflect.DeepEqual(got, test.Expected) {
+				t.Errorf("expected %v, got %v for polygon: %+v",
+					test.Expected, got, test.QueryShape)
+			}
+		})
+		err = i.Delete(doc.ID())
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+		err = indexReader.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestMultiPolygonPolygonContains(t *testing.T) {
+	tests := []struct {
+		QueryShape       [][][][]float64
+		DocShapeVertices [][][]float64
+		DocShapeName     string
+		Expected         []string
+		Desc             string
+		QueryType        string
+	}{
+		{
+			QueryShape:       [][][][]float64{leftRect},
+			DocShapeVertices: leftRect,
+			DocShapeName:     "polygon1",
+			Expected:         []string{"polygon1"},
+			Desc:             "coincident polygons",
+			QueryType:        "contains",
+		},
+		{
+			QueryShape:       [][][][]float64{{{{2, 2}, {-2, 2}, {-2, -2}, {2, -2}}}},
+			DocShapeVertices: leftRect,
+			DocShapeName:     "polygon1",
+			Expected:         nil,
+			Desc:             "polygon larger than polygons in query shape",
+			QueryType:        "contains",
+		},
+	}
+
+	i := setupIndex(t)
+
+	for _, test := range tests {
+		doc := document.NewDocument(test.DocShapeName)
+		doc.AddField(document.NewGeoShapeFieldWithIndexingOptions("geometry", []uint64{},
+			[][][][]float64{test.DocShapeVertices}, "polygon", document.DefaultGeoShapeIndexingOptions))
+		err := i.Update(doc)
+		if err != nil {
+			t.Error(err)
+		}
+
+		indexReader, err := i.Reader()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		t.Run(test.Desc, func(t *testing.T) {
+			got, err := runGeoShapeMultiPolygonQueryWithRelation(test.QueryType,
 				indexReader, test.QueryShape, "geometry")
 			if err != nil {
 				t.Errorf(err.Error())
