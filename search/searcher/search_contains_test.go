@@ -88,21 +88,30 @@ func TestLinestringPolygonContains(t *testing.T) {
 		Expected         []string
 		QueryType        string
 	}{
-		{ // check this one
+		{
 			QueryShape:       [][]float64{{1, 2}, {3, 5}},
 			DocShapeVertices: [][][]float64{{{1, 2}, {3, 5}, {2, 7}, {1, 2}}},
 			DocShapeName:     "polygon1",
 			Desc:             "linestring coinciding with edge of the polygon",
-			Expected:         []string{"polygon1"},
+			Expected:         nil,
 			QueryType:        "contains",
 		},
 		{
-			// check this one
 			QueryShape:       [][]float64{{1, 0}, {0, 1}},
 			DocShapeVertices: rightRect,
 			DocShapeName:     "polygon1",
 			Desc:             "diagonal of a square",
-			Expected:         []string{"polygon1"},
+			Expected:         nil,
+			QueryType:        "contains",
+		},
+		{
+			// check this one
+			// ES supports contains for linestrings
+			QueryShape:       [][]float64{{0.2, 0.2}, {0.8, 0.8}},
+			DocShapeVertices: rightRect,
+			DocShapeName:     "polygon1",
+			Desc:             "linestring within polygon",
+			Expected:         nil,
 			QueryType:        "contains",
 		},
 	}
@@ -392,8 +401,8 @@ func TestPolygonLinestringContains(t *testing.T) {
 	}{
 		{
 			QueryShape:       rightRect,
-			DocShapeVertices: [][]float64{{1, 0}, {0, 1}},
-			DocShapeName:     "point1",
+			DocShapeVertices: [][]float64{{0, 1}, {1, 0}},
+			DocShapeName:     "linestring1",
 			Expected:         nil, // nil since linestring is a non-closed shape
 			Desc:             "diagonal of a square",
 			QueryType:        "contains",
@@ -406,6 +415,64 @@ func TestPolygonLinestringContains(t *testing.T) {
 		doc := document.NewDocument(test.DocShapeName)
 		doc.AddField(document.NewGeoShapeFieldWithIndexingOptions("geometry", []uint64{},
 			[][][][]float64{{test.DocShapeVertices}}, "linestring", document.DefaultGeoShapeIndexingOptions))
+		err := i.Update(doc)
+		if err != nil {
+			t.Error(err)
+		}
+
+		indexReader, err := i.Reader()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		t.Run(test.Desc, func(t *testing.T) {
+			got, err := runGeoShapePolygonQueryWithRelation(test.QueryType,
+				indexReader, test.QueryShape, "geometry")
+			if err != nil {
+				t.Errorf(err.Error())
+			}
+			if !reflect.DeepEqual(got, test.Expected) {
+				t.Errorf("expected %v, got %v for polygon: %+v",
+					test.Expected, got, test.QueryShape)
+			}
+		})
+		err = i.Delete(doc.ID())
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+		err = indexReader.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestPolygonEnvelopeContains(t *testing.T) {
+	tests := []struct {
+		QueryShape       [][][]float64
+		DocShapeVertices [][]float64
+		DocShapeName     string
+		Expected         []string
+		Desc             string
+		QueryType        string
+	}{
+		{
+			// check this one
+			QueryShape:       [][][]float64{{{0.5, 0.5}, {1, 0.5}, {1, 1}, {0.5, 1}, {0.5, 0.5}}},
+			DocShapeVertices: [][]float64{{0, 1}, {1, 0}},
+			DocShapeName:     "envelope1",
+			Expected:         []string{"envelope1"},
+			Desc:             "envelope contained within polygon",
+			QueryType:        "contains",
+		},
+	}
+
+	i := setupIndex(t)
+
+	for _, test := range tests {
+		doc := document.NewDocument(test.DocShapeName)
+		doc.AddField(document.NewGeoShapeFieldWithIndexingOptions("geometry", []uint64{},
+			[][][][]float64{{test.DocShapeVertices}}, "envelope", document.DefaultGeoShapeIndexingOptions))
 		err := i.Update(doc)
 		if err != nil {
 			t.Error(err)
@@ -514,11 +581,10 @@ func TestMultiPointLinestringContains(t *testing.T) {
 		QueryType        string
 	}{
 		{
-			// check this one
-			QueryShape:       leftRectEdgeMultiPoint, // [][]float64{{-1, 0.2}, {-0.9, 0.1}}
+			QueryShape:       leftRectEdgeMultiPoint,
 			DocShapeVertices: [][]float64{{-1, 0.2}, {-0.9, 0.1}},
 			DocShapeName:     "linestring1",
-			Expected:         []string{"linestring1"},
+			Expected:         nil,
 			Desc:             "multi point overlaps with all linestring end points",
 			QueryType:        "contains",
 		},
@@ -819,6 +885,133 @@ func TestMultiPolygonPolygonContains(t *testing.T) {
 		t.Run(test.Desc, func(t *testing.T) {
 			got, err := runGeoShapeMultiPolygonQueryWithRelation(test.QueryType,
 				indexReader, test.QueryShape, "geometry")
+			if err != nil {
+				t.Errorf(err.Error())
+			}
+			if !reflect.DeepEqual(got, test.Expected) {
+				t.Errorf("expected %v, got %v for polygon: %+v",
+					test.Expected, got, test.QueryShape)
+			}
+		})
+		err = i.Delete(doc.ID())
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+		err = indexReader.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestMultiLinestringMultiPolygonContains(t *testing.T) {
+	tests := []struct {
+		QueryShape       [][][]float64
+		DocShapeVertices [][][][]float64
+		DocShapeName     string
+		Expected         []string
+		Desc             string
+		QueryType        string
+	}{
+		{
+			QueryShape:       [][][]float64{{{0.2, 1}, {0.8, 1}}, {{1, 0.2}, {1, 0.8}}},
+			DocShapeVertices: [][][][]float64{rightRect},
+			DocShapeName:     "multipolygon1",
+			Expected:         nil, // contains doesn't include edges or vertices
+			Desc:             "linestrings on edge of polygon",
+			QueryType:        "contains",
+		},
+		{
+			// check this one
+			QueryShape:       [][][]float64{{{0.2, 0.2}, {0.8, 0.8}}, {{0.8, 0.2}, {0.2, 0.8}}},
+			DocShapeVertices: [][][][]float64{rightRect},
+			DocShapeName:     "multipolygon1",
+			Expected:         nil,
+			Desc:             "linestrings within polygon",
+			QueryType:        "contains",
+		},
+	}
+
+	i := setupIndex(t)
+
+	for _, test := range tests {
+		doc := document.NewDocument(test.DocShapeName)
+		doc.AddField(document.NewGeoShapeFieldWithIndexingOptions("geometry", []uint64{},
+			test.DocShapeVertices, "multipolygon", document.DefaultGeoShapeIndexingOptions))
+		err := i.Update(doc)
+		if err != nil {
+			t.Error(err)
+		}
+
+		indexReader, err := i.Reader()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		t.Run(test.Desc, func(t *testing.T) {
+			got, err := runGeoShapeMultiLinestringIntersectsQuery(test.QueryType,
+				indexReader, test.QueryShape, "geometry")
+			if err != nil {
+				t.Errorf(err.Error())
+			}
+			if !reflect.DeepEqual(got, test.Expected) {
+				t.Errorf("expected %v, got %v for multilinestring: %+v",
+					test.Expected, got, test.QueryShape)
+			}
+		})
+		err = i.Delete(doc.ID())
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+		err = indexReader.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestGeometryCollectionPolygonContains(t *testing.T) {
+	tests := []struct {
+		QueryShape       [][][][][]float64
+		QueryShapeTypes  []string
+		DocShapeVertices [][][]float64
+		DocShapeName     string
+		Expected         []string
+		Desc             string
+		QueryType        string
+	}{
+		{
+			// check this one - does include lines on the edges
+			// linestring order changes the result!
+			QueryShape:       [][][][][]float64{{{{{0, 1}, {1, 0}}}}},
+			QueryShapeTypes:  []string{"linestring"},
+			DocShapeVertices: rightRect, // 0,0 1,0 1,1 0,1 0,0
+			DocShapeName:     "polygon1",
+			Expected:         []string{"polygon1"},
+			Desc:             "linestring on edge of polygon",
+			QueryType:        "contains",
+		},
+	}
+
+	i := setupIndex(t)
+
+	for _, test := range tests {
+		doc := document.NewDocument(test.DocShapeName)
+		doc.AddField(document.NewGeoShapeFieldWithIndexingOptions("geometry", []uint64{},
+			[][][][]float64{test.DocShapeVertices}, "polygon", document.DefaultGeoShapeIndexingOptions))
+		err := i.Update(doc)
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+
+		indexReader, err := i.Reader()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		t.Run(test.Desc, func(t *testing.T) {
+			got, err := runGeoShapeGeometryCollectionRelationQuery(test.QueryType,
+				indexReader, test.QueryShape, test.QueryShapeTypes, "geometry")
 			if err != nil {
 				t.Errorf(err.Error())
 			}
