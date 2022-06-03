@@ -462,8 +462,9 @@ func TestPolygonEnvelopeContains(t *testing.T) {
 			DocShapeVertices: [][]float64{{0, 1}, {1, 0}},
 			DocShapeName:     "envelope1",
 			Expected:         []string{"envelope1"},
-			Desc:             "envelope contained within polygon",
-			QueryType:        "contains",
+			Desc:             "polygon contained inside envelope with edge overlaps", // this probably fails since
+			// contains doesn't include edges or vertices
+			QueryType: "contains",
 		},
 	}
 
@@ -524,6 +525,7 @@ func TestMultiPointPolygonContains(t *testing.T) {
 		},
 		{
 			// check this one
+			// ES support points on edges
 			QueryShape:       [][]float64{{1, 0.5}},
 			DocShapeVertices: rightRect,
 			DocShapeName:     "polygon1",
@@ -924,7 +926,7 @@ func TestMultiLinestringMultiPolygonContains(t *testing.T) {
 		{
 			// check this one
 			QueryShape:       [][][]float64{{{0.2, 0.2}, {0.8, 0.8}}, {{0.8, 0.2}, {0.2, 0.8}}},
-			DocShapeVertices: [][][][]float64{rightRect},
+			DocShapeVertices: [][][][]float64{{{{0, 0}, {1, 0}, {1, 1}, {0, 1}, {0, 0}}}},
 			DocShapeName:     "multipolygon1",
 			Expected:         nil,
 			Desc:             "linestrings within polygon",
@@ -981,8 +983,6 @@ func TestGeometryCollectionPolygonContains(t *testing.T) {
 		QueryType        string
 	}{
 		{
-			// check this one - does include lines on the edges
-			// linestring order changes the result!
 			QueryShape:       [][][][][]float64{{{{{0, 1}, {1, 0}}}}},
 			QueryShapeTypes:  []string{"linestring"},
 			DocShapeVertices: rightRect, // 0,0 1,0 1,1 0,1 0,0
