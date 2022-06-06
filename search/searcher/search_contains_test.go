@@ -93,7 +93,7 @@ func TestLinestringPolygonContains(t *testing.T) {
 			DocShapeVertices: [][][]float64{{{1, 2}, {3, 5}, {2, 7}, {1, 2}}},
 			DocShapeName:     "polygon1",
 			Desc:             "linestring coinciding with edge of the polygon",
-			Expected:         nil,
+			Expected:         []string{"polygon1"},
 			QueryType:        "contains",
 		},
 		{
@@ -101,17 +101,15 @@ func TestLinestringPolygonContains(t *testing.T) {
 			DocShapeVertices: rightRect,
 			DocShapeName:     "polygon1",
 			Desc:             "diagonal of a square",
-			Expected:         nil,
+			Expected:         []string{"polygon1"},
 			QueryType:        "contains",
 		},
 		{
-			// check this one
-			// ES supports contains for linestrings
 			QueryShape:       [][]float64{{0.2, 0.2}, {0.8, 0.8}},
 			DocShapeVertices: rightRect,
 			DocShapeName:     "polygon1",
 			Desc:             "linestring within polygon",
-			Expected:         nil,
+			Expected:         []string{"polygon1"},
 			QueryType:        "contains",
 		},
 	}
@@ -457,12 +455,11 @@ func TestPolygonEnvelopeContains(t *testing.T) {
 		QueryType        string
 	}{
 		{
-			// check this one
 			QueryShape:       [][][]float64{{{0.5, 0.5}, {1, 0.5}, {1, 1}, {0.5, 1}, {0.5, 0.5}}},
 			DocShapeVertices: [][]float64{{0, 1}, {1, 0}},
 			DocShapeName:     "envelope1",
-			Expected:         []string{"envelope1"},
-			Desc:             "polygon contained inside envelope with edge overlaps", // this probably fails since
+			Expected:         nil,
+			Desc:             "polygon contained inside envelope with edge overlaps", // this fails since
 			// contains doesn't include edges or vertices
 			QueryType: "contains",
 		},
@@ -524,12 +521,10 @@ func TestMultiPointPolygonContains(t *testing.T) {
 			QueryType:        "contains",
 		},
 		{
-			// check this one
-			// ES support points on edges
 			QueryShape:       [][]float64{{1, 0.5}},
 			DocShapeVertices: rightRect,
 			DocShapeName:     "polygon1",
-			Expected:         []string{"polygon1"},
+			Expected:         nil,
 			Desc:             "multi point on polygon edge",
 			QueryType:        "contains",
 		},
@@ -924,11 +919,10 @@ func TestMultiLinestringMultiPolygonContains(t *testing.T) {
 			QueryType:        "contains",
 		},
 		{
-			// check this one
 			QueryShape:       [][][]float64{{{0.2, 0.2}, {0.8, 0.8}}, {{0.8, 0.2}, {0.2, 0.8}}},
 			DocShapeVertices: [][][][]float64{{{{0, 0}, {1, 0}, {1, 1}, {0, 1}, {0, 0}}}},
 			DocShapeName:     "multipolygon1",
-			Expected:         nil,
+			Expected:         []string{"multipolygon1"},
 			Desc:             "linestrings within polygon",
 			QueryType:        "contains",
 		},
