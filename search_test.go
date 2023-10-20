@@ -12,16 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build vectors
-// +build vectors
-
 package bleve
 
 import (
 	"encoding/json"
 	"fmt"
-	"math"
-	"math/rand"
 	"reflect"
 	"strconv"
 	"strings"
@@ -59,21 +54,6 @@ import (
 	index "github.com/blevesearch/bleve_index_api"
 )
 
-func populateFakeVecs(dim int, dataset []map[string]interface{}) (rv []map[string]interface{}) {
-
-	for _, doc := range dataset {
-		var fakeVec []float32
-		for i := 0; i < dim; i++ {
-			fakeVec = append(fakeVec, float32(math.Round(rand.Float64()*1000)/1000))
-		}
-
-		doc["stubVec"] = fakeVec
-	}
-
-	rv = dataset
-	return rv
-}
-
 func TestSortedFacetedQuery(t *testing.T) {
 	tmpIndexPath := createTmpIndexPath(t)
 	defer cleanupTmpIndexPath(t, tmpIndexPath)
@@ -89,12 +69,6 @@ func TestSortedFacetedQuery(t *testing.T) {
 	contentFieldMapping.DocValues = true
 	documentMapping.AddFieldMappingsAt("content", contentFieldMapping)
 	documentMapping.AddFieldMappingsAt("country", contentFieldMapping)
-
-	vecFieldMapping := NewVectorFieldMapping()
-	vecFieldMapping.Index = true
-	vecFieldMapping.Dims = 64
-	vecFieldMapping.Similarity = "dot_product"
-	documentMapping.AddFieldMappingsAt("stubVec", vecFieldMapping)
 
 	index, err := New(tmpIndexPath, indexMapping)
 	if err != nil {
@@ -134,7 +108,6 @@ func TestSortedFacetedQuery(t *testing.T) {
 	searchRequest.SortBy([]string{"content"})
 	fr := NewFacetRequest("content", 100)
 	searchRequest.AddFacet("content_facet", fr)
-	searchRequest.SetKNN("stubVec", []float64{0.5, 0.5}, 2)
 
 	searchResults, err := index.Search(searchRequest)
 	if err != nil {

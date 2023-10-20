@@ -19,6 +19,7 @@ package searcher
 
 import (
 	"context"
+	"fmt"
 	"log"
 
 	"github.com/blevesearch/bleve/v2/mapping"
@@ -42,7 +43,10 @@ func NewKNNSearcher(ctx context.Context, i index.IndexReader, m mapping.IndexMap
 	options search.SearcherOptions, field string, vector []float32, k int64,
 	boost float64, similarityMetric string) (search.Searcher, error) {
 	if vr, ok := i.(index.VectorIndexReader); ok {
-		vectorReader, _ := vr.VectorReader(ctx, vector, field, k)
+		vectorReader, err := vr.PerSliceVR(ctx, vector, field, k)
+		if err != nil {
+			return nil, err
+		}
 
 		knnScorer := scorer.NewKNNQueryScorer(vector, field, boost,
 			options, similarityMetric)
@@ -56,6 +60,41 @@ func NewKNNSearcher(ctx context.Context, i index.IndexReader, m mapping.IndexMap
 		}, nil
 	}
 	return nil, nil
+}
+
+func (s *KNNSearcher) NumSlices() int {
+	// Adding this check in case the readers in the searcher haven't implemented
+	// the interface.
+	if x, ok := s.vectorReader.(index.ConcurrentVectorReader); ok {
+		return x.NumSlices()
+	}
+	return 1
+}
+
+func (s *KNNSearcher) NextInSlice(sliceIdx int, ctx *search.SearchContext) (*search.DocumentMatch, error) {
+	var err error
+	var vectorMatch *index.VectorDoc
+	if x, ok := s.vectorReader.(index.ConcurrentVectorReader); ok {
+		vectorMatch, err = x.NextInSlice(sliceIdx, &index.VectorDoc{})
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		vectorMatch, err = s.vectorReader.Next(&index.VectorDoc{}) // default fallback option
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if vectorMatch == nil {
+		return nil, nil
+	}
+
+	// score match
+	docMatch := s.scorer.Score(ctx, vectorMatch)
+	fmt.Printf("vector match is %+v \n", vectorMatch)
+	// return doc match
+	return docMatch, nil
 }
 
 func (s *KNNSearcher) Advance(ctx *search.SearchContext, ID index.IndexInternalID) (

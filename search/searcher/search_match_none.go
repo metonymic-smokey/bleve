@@ -39,6 +39,10 @@ func NewMatchNoneSearcher(indexReader index.IndexReader) (*MatchNoneSearcher, er
 	}, nil
 }
 
+func (s *MatchNoneSearcher) NumSlices() int {
+	return 0
+}
+
 func (s *MatchNoneSearcher) Size() int {
 	return reflectStaticSizeMatchNoneSearcher + size.SizeOfPtr
 }
@@ -73,4 +77,9 @@ func (s *MatchNoneSearcher) Min() int {
 
 func (s *MatchNoneSearcher) DocumentMatchPoolSize() int {
 	return 0
+}
+
+func (s *MatchNoneSearcher) NextInSlice(sliceIndex int, ctx *search.SearchContext) (
+	*search.DocumentMatch, error) {
+	return nil, nil
 }

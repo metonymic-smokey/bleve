@@ -63,6 +63,15 @@ func NewBooleanSearcher(ctx context.Context, indexReader index.IndexReader, must
 	return &rv, nil
 }
 
+func (s *BooleanSearcher) NumSlices() int {
+	return 0
+}
+
+func (s *BooleanSearcher) NextInSlice(sliceIndex int, ctx *search.SearchContext) (
+	*search.DocumentMatch, error) {
+	return nil, nil
+}
+
 func (s *BooleanSearcher) Size() int {
 	sizeInBytes := reflectStaticSizeBooleanSearcher + size.SizeOfPtr
 

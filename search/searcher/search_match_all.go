@@ -38,6 +38,15 @@ type MatchAllSearcher struct {
 	count       uint64
 }
 
+func (s *MatchAllSearcher) NumSlices() int {
+	return 0
+}
+
+func (s *MatchAllSearcher) NextInSlice(sliceIndex int, ctx *search.SearchContext) (
+	*search.DocumentMatch, error) {
+	return nil, nil
+}
+
 func NewMatchAllSearcher(ctx context.Context, indexReader index.IndexReader, boost float64, options search.SearcherOptions) (*MatchAllSearcher, error) {
 	reader, err := indexReader.DocIDReaderAll()
 	if err != nil {

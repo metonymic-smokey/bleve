@@ -101,7 +101,7 @@ func checkIndex(t *testing.T, path string, term []byte, field string, expectCoun
 	}
 
 	// run a search for hello
-	tfr, err := r.TermFieldReader(nil, term, field, false, false, false)
+	tfr, err := r.PerSliceTFR(nil, term, field, false, false, false)
 	if err != nil {
 		t.Errorf("error accessing term field reader: %v", err)
 	} else {

@@ -16,10 +16,11 @@ package scorch
 
 import (
 	"fmt"
+	"sync/atomic"
+
 	"github.com/RoaringBitmap/roaring"
 	index "github.com/blevesearch/bleve_index_api"
 	segment "github.com/blevesearch/scorch_segment_api/v2"
-	"sync/atomic"
 )
 
 var OptimizeConjunction = true
@@ -50,7 +51,9 @@ var OptimizeDisjunctionUnadornedMinChildCardinality = uint64(256)
 func (s *IndexSnapshotTermFieldReader) optimizeConjunction(
 	octx index.OptimizableContext) (index.OptimizableContext, error) {
 	if octx == nil {
-		octx = &OptimizeTFRConjunction{snapshot: s.snapshot}
+		octx = &OptimizeTFRConjunction{
+			snapshot: s.snapshot,
+		}
 	}
 
 	o, ok := octx.(*OptimizeTFRConjunction)
@@ -79,12 +82,14 @@ func (o *OptimizeTFRConjunction) Finish() (index.Optimized, error) {
 	}
 
 	for i := range o.snapshot.segment {
-		itr0, ok := o.tfrs[0].iterators[i].(segment.OptimizablePostingsIterator)
+		// Using total iterator field here since conjunction uses Next() and Advance(),
+		// not slice'd NextInSlice()
+		itr0, ok := o.tfrs[0].totalIterator[i].(segment.OptimizablePostingsIterator)
 		if !ok || itr0.ActualBitmap() == nil {
 			continue
 		}
 
-		itr1, ok := o.tfrs[1].iterators[i].(segment.OptimizablePostingsIterator)
+		itr1, ok := o.tfrs[1].totalIterator[i].(segment.OptimizablePostingsIterator)
 		if !ok || itr1.ActualBitmap() == nil {
 			continue
 		}
@@ -92,7 +97,7 @@ func (o *OptimizeTFRConjunction) Finish() (index.Optimized, error) {
 		bm := roaring.And(itr0.ActualBitmap(), itr1.ActualBitmap())
 
 		for _, tfr := range o.tfrs[2:] {
-			itr, ok := tfr.iterators[i].(segment.OptimizablePostingsIterator)
+			itr, ok := tfr.totalIterator[i].(segment.OptimizablePostingsIterator)
 			if !ok || itr.ActualBitmap() == nil {
 				continue
 			}
@@ -105,7 +110,7 @@ func (o *OptimizeTFRConjunction) Finish() (index.Optimized, error) {
 		// regular conjunction searcher machinery will still be used,
 		// but the underlying bitmap will be smaller.
 		for _, tfr := range o.tfrs {
-			itr, ok := tfr.iterators[i].(segment.OptimizablePostingsIterator)
+			itr, ok := tfr.totalIterator[i].(segment.OptimizablePostingsIterator)
 			if ok && itr.ActualBitmap() != nil {
 				itr.ReplaceActual(bm)
 			}
@@ -133,7 +138,8 @@ func (s *IndexSnapshotTermFieldReader) optimizeConjunctionUnadorned(
 	}
 
 	if o.snapshot != s.snapshot {
-		return nil, fmt.Errorf("tried to optimize unadorned conjunction across different snapshots")
+		return nil, fmt.Errorf("tried to optimize unadorned conjunction across " +
+			"different snapshots")
 	}
 
 	o.tfrs = append(o.tfrs, s)
@@ -174,13 +180,13 @@ OUTER:
 		var docNum1HitLastOk bool
 
 		for _, tfr := range o.tfrs {
-			if _, ok := tfr.iterators[i].(*emptyPostingsIterator); ok {
+			if _, ok := tfr.totalIterator[i].(*emptyPostingsIterator); ok {
 				// An empty postings iterator means the entire AND is empty.
-				oTFR.iterators[i] = anEmptyPostingsIterator
+				oTFR.totalIterator[i] = anEmptyPostingsIterator
 				continue OUTER
 			}
 
-			itr, ok := tfr.iterators[i].(segment.OptimizablePostingsIterator)
+			itr, ok := tfr.totalIterator[i].(segment.OptimizablePostingsIterator)
 			if !ok {
 				// We only optimize postings iterators that support this operation.
 				return nil, nil
@@ -193,7 +199,7 @@ OUTER:
 				if docNum1HitLastOk && docNum1HitLast != docNum1Hit {
 					// The docNum1Hit doesn't match the previous
 					// docNum1HitLast, so the entire AND is empty.
-					oTFR.iterators[i] = anEmptyPostingsIterator
+					oTFR.totalIterator[i] = anEmptyPostingsIterator
 					continue OUTER
 				}
 
@@ -205,7 +211,7 @@ OUTER:
 
 			if itr.ActualBitmap() == nil {
 				// An empty actual bitmap means the entire AND is empty.
-				oTFR.iterators[i] = anEmptyPostingsIterator
+				oTFR.totalIterator[i] = anEmptyPostingsIterator
 				continue OUTER
 			}
 
@@ -221,14 +227,14 @@ OUTER:
 				if !bm.Contains(uint32(docNum1HitLast)) {
 					// The docNum1Hit isn't in one of our actual
 					// bitmaps, so the entire AND is empty.
-					oTFR.iterators[i] = anEmptyPostingsIterator
+					oTFR.totalIterator[i] = anEmptyPostingsIterator
 					continue OUTER
 				}
 			}
 
 			// The actual bitmaps and docNum1Hits all contain or have
 			// the same 1-hit docNum, so that's our AND'ed result.
-			oTFR.iterators[i] = newUnadornedPostingsIteratorFrom1Hit(docNum1HitLast)
+			oTFR.totalIterator[i] = newUnadornedPostingsIteratorFrom1Hit(docNum1HitLast)
 
 			continue OUTER
 		}
@@ -236,13 +242,13 @@ OUTER:
 		if len(actualBMs) == 0 {
 			// If we've collected no actual bitmaps at this point,
 			// then the entire AND is empty.
-			oTFR.iterators[i] = anEmptyPostingsIterator
+			oTFR.totalIterator[i] = anEmptyPostingsIterator
 			continue OUTER
 		}
 
 		if len(actualBMs) == 1 {
 			// If we've only 1 actual bitmap, then that's our result.
-			oTFR.iterators[i] = newUnadornedPostingsIteratorFromBitmap(actualBMs[0])
+			oTFR.totalIterator[i] = newUnadornedPostingsIteratorFromBitmap(actualBMs[0])
 
 			continue OUTER
 		}
@@ -254,7 +260,7 @@ OUTER:
 			bm.And(actualBM)
 		}
 
-		oTFR.iterators[i] = newUnadornedPostingsIteratorFromBitmap(bm)
+		oTFR.totalIterator[i] = newUnadornedPostingsIteratorFromBitmap(bm)
 	}
 
 	atomic.AddUint64(&o.snapshot.parent.stats.TotTermSearchersStarted, uint64(1))
@@ -311,7 +317,7 @@ func (o *OptimizeTFRDisjunctionUnadorned) Finish() (rv index.Optimized, err erro
 		var cMax uint64
 
 		for _, tfr := range o.tfrs {
-			itr, ok := tfr.iterators[i].(segment.OptimizablePostingsIterator)
+			itr, ok := tfr.totalIterator[i].(segment.OptimizablePostingsIterator)
 			if !ok {
 				return nil, nil
 			}
@@ -338,7 +344,7 @@ func (o *OptimizeTFRDisjunctionUnadorned) Finish() (rv index.Optimized, err erro
 		actualBMs = actualBMs[:0]
 
 		for _, tfr := range o.tfrs {
-			itr, ok := tfr.iterators[i].(segment.OptimizablePostingsIterator)
+			itr, ok := tfr.totalIterator[i].(segment.OptimizablePostingsIterator)
 			if !ok {
 				return nil, nil
 			}
@@ -369,7 +375,7 @@ func (o *OptimizeTFRDisjunctionUnadorned) Finish() (rv index.Optimized, err erro
 
 		bm.AddMany(docNums)
 
-		oTFR.iterators[i] = newUnadornedPostingsIteratorFromBitmap(bm)
+		oTFR.totalIterator[i] = newUnadornedPostingsIteratorFromBitmap(bm)
 	}
 
 	atomic.AddUint64(&o.snapshot.parent.stats.TotTermSearchersStarted, uint64(1))
@@ -386,8 +392,10 @@ func (i *IndexSnapshot) unadornedTermFieldReader(
 		term:               term,
 		field:              field,
 		snapshot:           i,
-		iterators:          make([]segment.PostingsIterator, len(i.segment)),
-		segmentOffset:      0,
+		iterators:          make([][]segment.PostingsIterator, len(i.slices)),
+		totalIterator:      make([]segment.PostingsIterator, len(i.segment)),
+		currID:             make([]index.IndexInternalID, len(i.slices)),
+		currPosting:        make([]segment.Posting, len(i.slices)),
 		includeFreq:        false,
 		includeNorm:        false,
 		includeTermVectors: false,

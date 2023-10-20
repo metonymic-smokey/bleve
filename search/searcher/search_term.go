@@ -36,6 +36,8 @@ type TermSearcher struct {
 	reader      index.TermFieldReader
 	scorer      *scorer.TermQueryScorer
 	tfd         index.TermFieldDoc
+
+	perSliceTFRs []index.TermFieldReader
 }
 
 func NewTermSearcher(ctx context.Context, indexReader index.IndexReader, term string, field string, boost float64, options search.SearcherOptions) (*TermSearcher, error) {
@@ -47,8 +49,11 @@ func NewTermSearcher(ctx context.Context, indexReader index.IndexReader, term st
 
 func NewTermSearcherBytes(ctx context.Context, indexReader index.IndexReader, term []byte, field string, boost float64, options search.SearcherOptions) (*TermSearcher, error) {
 	needFreqNorm := options.Score != "none"
-	reader, err := indexReader.TermFieldReader(ctx, term, field, needFreqNorm, needFreqNorm, options.IncludeTermVectors)
+
+	reader, err := indexReader.PerSliceTFR(ctx, term, field, needFreqNorm,
+		needFreqNorm, options.IncludeTermVectors)
 	if err != nil {
+		_ = reader.Close()
 		return nil, err
 	}
 	return newTermSearcherFromReader(indexReader, reader, term, field, boost, options)
@@ -61,12 +66,57 @@ func newTermSearcherFromReader(indexReader index.IndexReader, reader index.TermF
 		_ = reader.Close()
 		return nil, err
 	}
+	// index reader doc count returns the total number of docs in THAT bleve index alone
+	// reader.count() returns docs which contain the term in THAT index alone.
 	scorer := scorer.NewTermQueryScorer(term, field, boost, count, reader.Count(), options)
 	return &TermSearcher{
 		indexReader: indexReader,
 		reader:      reader,
 		scorer:      scorer,
 	}, nil
+}
+
+func (s *TermSearcher) NumSlices() int {
+	// Adding this check in case the readers in the searcher haven't implemented
+	// the interface.
+	if x, ok := s.reader.(index.ConcurrentTermFieldReader); ok {
+		return x.NumSlices()
+	}
+	return 1
+}
+
+func (s *TermSearcher) NextInSlice(sliceIndex int, ctx *search.SearchContext) (
+	*search.DocumentMatch, error) {
+
+	// TODO Is it safe to invoke tfd.Reset() since that's unique to a searcher
+	// make a new one, per collector?!
+	// For now, just create a new one per request?
+
+	// Should be a concurrent reader too, not just a concurrent searcher
+	// Here, invoke conc reader on index snapshot/s.reader
+
+	var err error
+	var termMatch *index.TermFieldDoc
+	if x, ok := s.reader.(index.ConcurrentTermFieldReader); ok {
+		termMatch, err = x.NextInSlice(sliceIndex, s.tfd.Reset())
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		termMatch, err = s.reader.Next(s.tfd.Reset()) // default fallback option
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if termMatch == nil {
+		return nil, nil
+	}
+
+	// score match
+	docMatch := s.scorer.Score(ctx, termMatch)
+	// return doc match
+	return docMatch, nil
 }
 
 func (s *TermSearcher) Size() int {

@@ -2479,7 +2479,7 @@ func TestIndexSeekBackwardsStats(t *testing.T) {
 	}
 	defer reader.Close()
 
-	tfr, err := reader.TermFieldReader(nil, []byte("cat"), "name", false, false, false)
+	tfr, err := reader.PerSliceTFR(nil, []byte("cat"), "name", false, false, false)
 	if err != nil {
 		t.Fatalf("error getting term field readyer for name/cat: %v", err)
 	}

@@ -22,7 +22,8 @@ import (
 )
 
 type Collector interface {
-	Collect(ctx context.Context, searcher Searcher, reader index.IndexReader) error
+	Collect(ctx context.Context, searcher Searcher, reader index.IndexReader,
+		sliceIndex int) error
 	Results() DocumentMatchCollection
 	Total() uint64
 	MaxScore() float64

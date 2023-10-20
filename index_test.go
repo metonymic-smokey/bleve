@@ -1890,6 +1890,58 @@ func TestBooleanFieldMappingIssue109(t *testing.T) {
 	}
 }
 
+func TestTermQuery2(t *testing.T) {
+	tmpIndexPath := createTmpIndexPath(t)
+	// defer cleanupTmpIndexPath(t, tmpIndexPath)
+
+	index, err := New(tmpIndexPath, NewIndexMapping())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		err := index.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	for i := 0; i < 5; i++ {
+		err = index.Index(fmt.Sprintf("%v", i), "water")
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	for i := 5; i < 10; i++ {
+		err = index.Index(fmt.Sprintf("%v", i), "air air water")
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	for i := 10; i < 15; i++ {
+		err = index.Index(fmt.Sprintf("%v", i), "air")
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	query := NewTermQuery("air")
+	req := NewSearchRequest(query)
+	res, err := index.SearchInContext(ctx, req)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fmt.Printf("results are: \n")
+	for k, v := range res.Hits {
+		fmt.Printf("%v: ID: %v, hit number: %v, Score: %v \n", k, v.ID, v.HitNumber,
+			v.Score)
+	}
+}
+
 func TestSearchTimeout(t *testing.T) {
 	tmpIndexPath := createTmpIndexPath(t)
 	defer cleanupTmpIndexPath(t, tmpIndexPath)

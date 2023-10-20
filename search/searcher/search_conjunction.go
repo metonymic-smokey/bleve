@@ -227,6 +227,11 @@ OUTER:
 	return rv, nil
 }
 
+func (s *ConjunctionSearcher) NumSlices() int {
+	// Always 1 since conj search can't be parallelised
+	return 1
+}
+
 func (s *ConjunctionSearcher) Advance(ctx *search.SearchContext, ID index.IndexInternalID) (*search.DocumentMatch, error) {
 	if !s.initialized {
 		err := s.initSearchers(ctx)
@@ -283,4 +288,9 @@ func (s *ConjunctionSearcher) DocumentMatchPoolSize() int {
 		rv += s.DocumentMatchPoolSize()
 	}
 	return rv
+}
+
+func (s *ConjunctionSearcher) NextInSlice(sliceIndex int, ctx *search.SearchContext) (
+	*search.DocumentMatch, error) {
+	return nil, nil
 }
