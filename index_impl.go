@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -433,6 +434,8 @@ func memNeededForSearch(req *SearchRequest,
 	return uint64(estimate)
 }
 
+var EnableConcurrency = false
+
 // SearchInContext executes a search request operation within the provided
 // Context. Returns a SearchResult object or an error.
 func (i *indexImpl) SearchInContext(ctx context.Context, req *SearchRequest) (sr *SearchResult, err error) {
@@ -496,7 +499,6 @@ func (i *indexImpl) SearchInContext(ctx context.Context, req *SearchRequest) (sr
 	ctx = context.WithValue(ctx, search.GeoBufferPoolCallbackKey,
 		search.GeoBufferPoolCallbackFunc(getBufferPool))
 
-
 	// Using a disjunction query to get union of results from KNN query
 	// and the original query
 	searchQuery := disjunctQueryWithKNN(req)
@@ -522,6 +524,22 @@ func (i *indexImpl) SearchInContext(ctx context.Context, req *SearchRequest) (sr
 
 		search.RecordSearchCost(ctx, search.DoneM, 0)
 	}()
+
+	concurrentSearchers := searcher.NumSlices()
+	if !EnableConcurrency {
+		concurrentSearchers = 1
+	}
+	log.Printf("num of concurrent searchers is %v \n", concurrentSearchers)
+
+	var colls []*collector.TopNCollector
+
+	var collMgr *collector.TopNCollectorManager
+	if req.SearchAfter != nil {
+		collMgr = collector.NewTopNCollectorAfterManager(indexReader, req.Size, req.Sort,
+			req.SearchAfter)
+	} else {
+		collMgr = collector.NewTopNCollectorManager(indexReader, req.Size, req.From, req.Sort)
+	}
 
 	if req.Facets != nil {
 		facetsBuilder := search.NewFacetsBuilder(indexReader)

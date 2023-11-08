@@ -21,6 +21,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"log"
 	"reflect"
 
 	"github.com/blevesearch/bleve/v2/size"
@@ -74,11 +75,15 @@ func (i *IndexSnapshotVectorReader) Next(preAlloced *index.VectorDoc) (
 		rv = &index.VectorDoc{}
 	}
 
+	log.Printf("segment offset is %+v \n", i.segmentOffset)
+	log.Printf("len iterators is %+v \n", len(i.iterators))
+
 	for i.segmentOffset < len(i.iterators) {
 		next, err := i.iterators[i.segmentOffset].Next()
 		if err != nil {
 			return nil, err
 		}
+		log.Printf("next is nil: %+v \n", next == nil)
 		if next != nil {
 			// make segment number into global number by adding offset
 			globalOffset := i.snapshot.offsets[i.segmentOffset]
@@ -89,11 +94,13 @@ func (i *IndexSnapshotVectorReader) Next(preAlloced *index.VectorDoc) (
 			i.currID = rv.ID
 			i.currPosting = next
 
+			log.Printf("returning rv: %+v", rv)
 			return rv, nil
 		}
 		i.segmentOffset++
 	}
 
+	log.Printf("returning at the end...")
 	return nil, nil
 }
 

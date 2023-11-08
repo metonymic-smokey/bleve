@@ -83,26 +83,69 @@ func (i *IndexSnapshotTermFieldReader) Next(preAlloced *index.TermFieldDoc) (*in
 		rv = &index.TermFieldDoc{}
 	}
 	// find the next hit
-	for i.segmentOffset < len(i.iterators) {
-		prevBytesRead := i.iterators[i.segmentOffset].BytesRead()
-		next, err := i.iterators[i.segmentOffset].Next()
+	for i.segmentOffset[0] < len(i.iterators[0]) {
+		prevBytesRead := i.iterators[0][i.segmentOffset[0]].BytesRead()
+		next, err := i.iterators[0][i.segmentOffset[0]].Next()
 		if err != nil {
 			return nil, err
 		}
 		if next != nil {
 			// make segment number into global number by adding offset
-			globalOffset := i.snapshot.offsets[i.segmentOffset]
+			// DOUBLE CHECK THIS!
+			globalOffset := i.snapshot.offsets[i.segmentOffset[0]]
 			nnum := next.Number()
 			rv.ID = docNumberToBytes(rv.ID, nnum+globalOffset)
 			i.postingToTermFieldDoc(next, rv)
 
-			i.currID = rv.ID
-			i.currPosting = next
+			i.currID[0] = rv.ID
+			i.currPosting[0] = next
 			// postingsIterators is maintain the bytesRead stat in a cumulative fashion.
 			// this is because there are chances of having a series of loadChunk calls,
 			// and they have to be added together before sending the bytesRead at this point
 			// upstream.
-			bytesRead := i.iterators[i.segmentOffset].BytesRead()
+			bytesRead := i.iterators[0][i.segmentOffset[0]].BytesRead()
+			if bytesRead > prevBytesRead {
+				i.incrementBytesRead(bytesRead - prevBytesRead)
+			}
+			return rv, nil
+		}
+		i.nextSegOffset++
+		i.segmentOffset[0]++
+	}
+	return nil, nil
+}
+
+func (i *NewIndexSnapshotTermFieldReader) NumSlices() int {
+	return len(i.snapshot.slices)
+}
+
+func (i *NewIndexSnapshotTermFieldReader) NextInSlice(sliceIndex int, preAlloced *index.TermFieldDoc) (*index.TermFieldDoc, error) {
+	rv := &index.TermFieldDoc{}
+	fmt.Printf("slice index is %v \n", sliceIndex)
+	// find the next hit
+	for i.segmentOffset[sliceIndex] < len(i.iterators[sliceIndex]) {
+		prevBytesRead := i.iterators[sliceIndex][i.segmentOffset[sliceIndex]].BytesRead()
+		next, err := i.iterators[sliceIndex][i.segmentOffset[sliceIndex]].Next()
+		if err != nil {
+			return nil, err
+		}
+		if next != nil {
+			// make segment number into global number by adding offset
+			// globalSegOffset --> global offset of seg number
+			globalSegOffset := i.segmentOffset[sliceIndex] + i.sliceOffset[sliceIndex]
+			globalOffset := i.snapshot.offsets[globalSegOffset]
+			nnum := next.Number()
+			rv.ID = docNumberToBytes(rv.ID, nnum+globalOffset)
+			fmt.Printf("global offset is %v, nnum is %v, ID is %v \n", globalOffset, nnum, (rv.ID))
+			i.postingToTermFieldDoc(next, rv)
+
+			i.currID[sliceIndex] = rv.ID
+			i.currPosting[sliceIndex] = next
+			// postingsIterators is maintain the bytesRead stat in a cumulative fashion.
+			// this is because there are chances of having a series of loadChunk calls,
+			// and they have to be added together before sending the bytesRead at this point
+			// upstream.
+			bytesRead := i.iterators[sliceIndex][i.segmentOffset[sliceIndex]].BytesRead()
 			if bytesRead > prevBytesRead {
 				i.incrementBytesRead(bytesRead - prevBytesRead)
 			}

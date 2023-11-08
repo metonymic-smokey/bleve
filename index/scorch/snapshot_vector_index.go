@@ -19,6 +19,7 @@ package scorch
 
 import (
 	"context"
+	"log"
 
 	index "github.com/blevesearch/bleve_index_api"
 	segment_api "github.com/blevesearch/scorch_segment_api/v2"
@@ -34,16 +35,21 @@ func (is *IndexSnapshot) VectorReader(ctx context.Context, vector []float32,
 		k:        k,
 		snapshot: is,
 	}
+	rv.segmentOffset = 0
+	rv.currPosting = nil
+	rv.currID = rv.currID[:0]
 
 	if rv.postings == nil {
 		rv.postings = make([]segment_api.VecPostingsList, len(is.segment))
 	}
 	if rv.iterators == nil {
 		rv.iterators = make([]segment_api.VecPostingsIterator, len(is.segment))
+		log.Printf("num of iterators in vr is %+v \n", len(rv.iterators))
 	}
 
 	for i, seg := range is.segment {
 		if sv, ok := seg.segment.(segment_api.VectorSegment); ok {
+			log.Printf("passing the vec seg check \n")
 			pl, err := sv.SimilarVectors(field, vector, k, seg.deleted)
 			if err != nil {
 				return nil, err

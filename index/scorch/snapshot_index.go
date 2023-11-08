@@ -95,6 +95,27 @@ func (i *IndexSnapshot) Segments() []*SegmentSnapshot {
 	return i.segment
 }
 
+// Func to return 'seg slices' which will be used for concurrency
+// IndexSnapshot implements this concept since it has a segmented index
+// Hence, the new interface ConcurrentSegSearcher which will have a func
+// SegSlices()
+func (i *IndexSnapshot) SegmentSlices(segments []*SegmentSnapshot) [][]*SegmentSnapshot {
+	// if concurrency is disabled, return 1 slice with all segments
+
+	tasks := make([][]*SegmentSnapshot, 0)
+
+	// temporary - just to test for 1 slice - no conc enabled.
+	tasks = append(tasks, segments)
+	return tasks
+
+	for _, segment := range segments {
+		task := []*SegmentSnapshot{segment}
+		tasks = append(tasks, task)
+	}
+
+	return tasks
+}
+
 func (i *IndexSnapshot) Internal() map[string][]byte {
 	return i.internal
 }

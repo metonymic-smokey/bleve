@@ -19,6 +19,7 @@ package searcher
 
 import (
 	"context"
+	"log"
 
 	"github.com/blevesearch/bleve/v2/mapping"
 	"github.com/blevesearch/bleve/v2/search"
@@ -41,18 +42,10 @@ func NewKNNSearcher(ctx context.Context, i index.IndexReader, m mapping.IndexMap
 	options search.SearcherOptions, field string, vector []float32, k int64,
 	boost float64, similarityMetric string) (search.Searcher, error) {
 	if vr, ok := i.(index.VectorIndexReader); ok {
-		vectorReader, err := vr.VectorReader(ctx, vector, field, k)
-		if err != nil {
-			return nil, err
-		}
-		count, err := i.DocCount()
-		if err != nil {
-			_ = vectorReader.Close()
-			return nil, err
-		}
+		vectorReader, _ := vr.VectorReader(ctx, vector, field, k)
 
 		knnScorer := scorer.NewKNNQueryScorer(vector, field, boost,
-			vectorReader.Count(), count, options, similarityMetric)
+			options, similarityMetric)
 		return &KNNSearcher{
 			indexReader:  i,
 			vectorReader: vectorReader,
@@ -104,10 +97,12 @@ func (s *KNNSearcher) Next(ctx *search.SearchContext) (*search.DocumentMatch, er
 	}
 
 	if knnMatch == nil {
+		log.Printf("knnMatch is nil...")
 		return nil, nil
 	}
 
 	docMatch := s.scorer.Score(ctx, knnMatch)
+	log.Printf("knnMatch is %+v", knnMatch)
 
 	return docMatch, nil
 }
