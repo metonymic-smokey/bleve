@@ -28,6 +28,14 @@ import (
 	"github.com/blevesearch/bleve/v2/search/query"
 )
 
+func getRandomQueryVec(dims int) []float32 {
+	vec := make([]float32, dims)
+	for i := 0; i < dims; i++ {
+		vec[i] = rand.Float32()
+	}
+	return vec
+}
+
 // Test to see if KNN Operators get added right to the query.
 func TestKNNOperator(t *testing.T) {
 	tmpIndexPath := createTmpIndexPath(t)
@@ -89,7 +97,7 @@ func TestKNNOperator(t *testing.T) {
 	termQuery := query.NewTermQuery("world")
 
 	searchRequest := NewSearchRequest(termQuery)
-	queryVec2 := getQueryVec("hilly region worldwide")
+	queryVec2 := getRandomQueryVec(5)
 	searchRequest.AddKNN("vector", queryVec2, 3, 2.0)
 	searchRequest.AddKNN("vector", queryVec2, 2, 1.5)
 	searchRequest.Fields = []string{"content", "vector"}
