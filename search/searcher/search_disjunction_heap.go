@@ -227,6 +227,10 @@ func (s *DisjunctionHeapSearcher) Next(ctx *search.SearchContext) (
 	return rv, nil
 }
 
+func (s *DisjunctionHeapSearcher) NumSlices() int {
+	return 0
+}
+
 func (s *DisjunctionHeapSearcher) Advance(ctx *search.SearchContext,
 	ID index.IndexInternalID) (*search.DocumentMatch, error) {
 	if !s.initialized {
@@ -345,4 +349,9 @@ func (s *DisjunctionHeapSearcher) Pop() interface{} {
 	x := old[n-1]
 	s.heap = old[0 : n-1]
 	return x
+}
+
+func (s *DisjunctionHeapSearcher) NextInSlice(sliceIndex int, ctx *search.SearchContext) (
+	*search.DocumentMatch, error) {
+	return nil, nil
 }

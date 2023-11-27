@@ -89,10 +89,33 @@ type IndexSnapshot struct {
 
 	m2        sync.Mutex                                 // Protects the fields that follow.
 	fieldTFRs map[string][]*IndexSnapshotTermFieldReader // keyed by field, recycled TFR's
+
+	slices [][]*SegmentSnapshot
 }
 
 func (i *IndexSnapshot) Segments() []*SegmentSnapshot {
 	return i.segment
+}
+
+// Func to return 'seg slices' which will be used for concurrency
+// IndexSnapshot implements this concept since it has a segmented index
+// Hence, the new interface ConcurrentSegSearcher which will have a func
+// SegSlices()
+func (i *IndexSnapshot) SegmentSlices(segments []*SegmentSnapshot) [][]*SegmentSnapshot {
+	tasks := make([][]*SegmentSnapshot, 0)
+
+	// if concurrency is disabled, return 1 slice with all segments
+	if i.parent.config["enable_concurrency"] != "true" {
+		tasks = append(tasks, segments)
+		return tasks
+	}
+
+	for _, segment := range segments {
+		task := []*SegmentSnapshot{segment}
+		tasks = append(tasks, task)
+	}
+
+	return tasks
 }
 
 func (i *IndexSnapshot) Internal() map[string][]byte {
@@ -403,7 +426,11 @@ func (is *IndexSnapshot) DocCount() (uint64, error) {
 
 func (is *IndexSnapshot) Document(id string) (rv index.Document, err error) {
 	// FIXME could be done more efficiently directly, but reusing for simplicity
-	tfr, err := is.TermFieldReader(nil, []byte(id), "_id", false, false, false)
+	// Changed this from TFR() to PerSliceTFR() since that's initialised at query time
+	// and hence, will have the offsets/total iterators initialised.
+	// Marks a transition towards 'sliced' TFR.
+	// TODO Check with team if this is the right way to do it!
+	tfr, err := is.PerSliceTFR(nil, []byte(id), "_id", false, false, false)
 	if err != nil {
 		return nil, err
 	}
@@ -501,7 +528,7 @@ func (is *IndexSnapshot) ExternalID(id index.IndexInternalID) (string, error) {
 
 func (is *IndexSnapshot) InternalID(id string) (rv index.IndexInternalID, err error) {
 	// FIXME could be done more efficiently directly, but reusing for simplicity
-	tfr, err := is.TermFieldReader(nil, []byte(id), "_id", false, false, false)
+	tfr, err := is.PerSliceTFR(nil, []byte(id), "_id", false, false, false)
 	if err != nil {
 		return nil, err
 	}
@@ -519,6 +546,108 @@ func (is *IndexSnapshot) InternalID(id string) (rv index.IndexInternalID, err er
 	return next.ID, nil
 }
 
+// Returns the slice index for a segment, given the seg number
+func (is *IndexSnapshot) sliceForASegOffset(segOffset int) int {
+	var pos, runningSum int
+	for i, slice := range is.slices {
+		if runningSum+len(slice) > segOffset {
+			pos = i
+			break
+		}
+		runningSum += len(slice)
+	}
+	return pos
+}
+
+// This is also a scorch level change, so ud can make a similar change based on
+// its index.
+func (is *IndexSnapshot) PerSliceTFR(ctx context.Context,
+	term []byte, field string, includeFreq,
+	includeNorm, includeTermVectors bool) (index.TermFieldReader, error) {
+
+	rvs := &IndexSnapshotTermFieldReader{}
+	rvs.nextSegOffset = 0
+
+	// TODO Needs a re think
+	// Added this check since per slice TFR is called multiple times during a search
+	// when creating searcher, LoadAndHighlightFields(),InternalID() etc.
+	// Avoiding a recomputation each time would be helpful.
+
+	// Other option would be to add a new function to indexReader interface which computes
+	// segments and stores them in IndexSnapshot. This would be a one time computation
+	if len(is.slices) == 0 {
+		segs := is.SegmentSlices(is.segment)
+		is.slices = segs
+	}
+
+	rvs.sliceOffset = make([]int, len(is.slices))
+	rvs.dicts = make([][]segment.TermDictionary, len(is.slices))
+	rvs.postings = make([][]segment.PostingsList, len(is.slices))
+	rvs.iterators = make([][]segment.PostingsIterator, len(is.slices))
+	rvs.currID = make([]index.IndexInternalID, len(is.slices))
+	rvs.currPosting = make([]segment.Posting, len(is.slices))
+	rvs.segmentOffset = make([]int, len(is.slices))
+
+	rvs.totalIterator = make([]segment.PostingsIterator, 0)
+
+	var running int
+
+	for i, task := range is.slices {
+		rvs.ctx = ctx
+		rvs.term = term
+		rvs.field = field
+		rvs.snapshot = is
+
+		rvs.segmentOffset[i] = 0
+
+		// adding the length of slices of the previous slice
+		rvs.sliceOffset[i] = running
+		running += len(task)
+
+		rvs.includeFreq = includeFreq
+		rvs.includeNorm = includeNorm
+		rvs.includeTermVectors = includeTermVectors
+		if rvs.postings[i] == nil {
+			rvs.postings[i] = make([]segment.PostingsList, len(task))
+		}
+
+		// TODO REVISE THIS SECTION!
+
+		// segment for the individual TFR
+		for j, seg := range task {
+			dict, err := seg.segment.Dictionary(field)
+			if err != nil {
+				return nil, err
+			}
+			if len(rvs.dicts[i]) == 0 {
+				rvs.dicts[i] = make([]segment.TermDictionary, len(task))
+			}
+			// only 1 dictionary for now
+			// could be more if more segments are later included.
+			rvs.dicts[i][j] = dict
+		}
+
+		for j, seg := range task {
+			pl, err := rvs.dicts[i][j].PostingsList(term, seg.deleted,
+				rvs.postings[i][j])
+			if err != nil {
+				return nil, err
+			}
+			if len(rvs.iterators[i]) == 0 {
+				rvs.iterators[i] = make([]segment.PostingsIterator, len(task))
+			}
+			rvs.postings[i][j] = pl
+			rvs.iterators[i][j] = pl.Iterator(includeFreq, includeNorm,
+				includeTermVectors, rvs.iterators[i][j])
+
+			rvs.totalIterator = append(rvs.totalIterator, rvs.iterators[i][j])
+		}
+	}
+	atomic.AddUint64(&is.parent.stats.TotTermSearchersStarted, uint64(1))
+
+	return rvs, nil
+}
+
 func (is *IndexSnapshot) TermFieldReader(ctx context.Context, term []byte, field string, includeFreq,
 	includeNorm, includeTermVectors bool) (index.TermFieldReader, error) {
 	rv := is.allocTermFieldReaderDicts(field)
@@ -528,67 +657,71 @@ func (is *IndexSnapshot) TermFieldReader(ctx context.Context, term []byte, field
 	rv.field = field
 	rv.snapshot = is
 	if rv.postings == nil {
-		rv.postings = make([]segment.PostingsList, len(is.segment))
+		rv.postings = make([][]segment.PostingsList, len(is.segment))
 	}
 	if rv.iterators == nil {
-		rv.iterators = make([]segment.PostingsIterator, len(is.segment))
+		rv.iterators = make([][]segment.PostingsIterator, len(is.segment))
 	}
-	rv.segmentOffset = 0
+	rv.segmentOffset = make([]int, len(is.segment))
 	rv.includeFreq = includeFreq
 	rv.includeNorm = includeNorm
 	rv.includeTermVectors = includeTermVectors
 	rv.currPosting = nil
 	rv.currID = rv.currID[:0]
 
-	if rv.dicts == nil {
-		rv.dicts = make([]segment.TermDictionary, len(is.segment))
-		for i, s := range is.segment {
-			// the intention behind this compare and swap operation is
-			// to make sure that the accounting of the metadata is happening
-			// only once(which corresponds to this persisted segment's most
-			// recent segPlugin.Open() call), and any subsequent queries won't
-			// incur this cost which would essentially be a double counting.
-			if atomic.CompareAndSwapUint32(&s.mmaped, 1, 0) {
-				segBytesRead := s.segment.BytesRead()
-				rv.incrementBytesRead(segBytesRead)
+	/*
+		if rv.dicts == nil {
+			rv.dicts = make([][]segment.TermDictionary, len(is.segment))
+			for i, s := range is.segment {
+				// the intention behind this compare and swap operation is
+				// to make sure that the accounting of the metadata is happening
+				// only once(which corresponds to this persisted segment's most
+				// recent segPlugin.Open() call), and any subsequent queries won't
+				// incur this cost which would essentially be a double counting.
+				if atomic.CompareAndSwapUint32(&s.mmaped, 1, 0) {
+					segBytesRead := s.segment.BytesRead()
+					rv.incrementBytesRead(segBytesRead)
+				}
+				dict, err := s.segment.Dictionary(field)
+				if err != nil {
+					return nil, err
+				}
+				if dictStats, ok := dict.(segment.DiskStatsReporter); ok {
+					bytesRead := dictStats.BytesRead()
+					rv.incrementBytesRead(bytesRead)
+				}
+				// For each segment, we need to create a new dictionary
+				// rv.dicts[i] = dict
 			}
-			dict, err := s.segment.Dictionary(field)
+		}
+
+		for i, s := range is.segment {
+			var prevBytesReadPL uint64
+			if rv.postings[i] != nil {
+				prevBytesReadPL = rv.postings[i].BytesRead()
+			}
+			// Pass the deleted docs for this segment here
+			pl, err := rv.dicts[i].PostingsList(term, s.deleted, rv.postings[i])
 			if err != nil {
 				return nil, err
 			}
-			if dictStats, ok := dict.(segment.DiskStatsReporter); ok {
-				bytesRead := dictStats.BytesRead()
-				rv.incrementBytesRead(bytesRead)
+			rv.postings[i] = pl
+
+			var prevBytesReadItr uint64
+			if rv.iterators[i] != nil {
+				prevBytesReadItr = rv.iterators[i].BytesRead()
 			}
-			rv.dicts[i] = dict
-		}
-	}
+			rv.iterators[i] = pl.Iterator(includeFreq, includeNorm, includeTermVectors, rv.iterators[i])
 
-	for i, s := range is.segment {
-		var prevBytesReadPL uint64
-		if rv.postings[i] != nil {
-			prevBytesReadPL = rv.postings[i].BytesRead()
-		}
-		pl, err := rv.dicts[i].PostingsList(term, s.deleted, rv.postings[i])
-		if err != nil {
-			return nil, err
-		}
-		rv.postings[i] = pl
+			if bytesRead := rv.postings[i].BytesRead(); prevBytesReadPL < bytesRead {
+				rv.incrementBytesRead(bytesRead - prevBytesReadPL)
+			}
 
-		var prevBytesReadItr uint64
-		if rv.iterators[i] != nil {
-			prevBytesReadItr = rv.iterators[i].BytesRead()
+			if bytesRead := rv.iterators[i].BytesRead(); prevBytesReadItr < bytesRead {
+				rv.incrementBytesRead(bytesRead - prevBytesReadItr)
+			}
 		}
-		rv.iterators[i] = pl.Iterator(includeFreq, includeNorm, includeTermVectors, rv.iterators[i])
-
-		if bytesRead := rv.postings[i].BytesRead(); prevBytesReadPL < bytesRead {
-			rv.incrementBytesRead(bytesRead - prevBytesReadPL)
-		}
-
-		if bytesRead := rv.iterators[i].BytesRead(); prevBytesReadItr < bytesRead {
-			rv.incrementBytesRead(bytesRead - prevBytesReadItr)
-		}
-	}
+	*/
 	atomic.AddUint64(&is.parent.stats.TotTermSearchersStarted, uint64(1))
 	return rv, nil
 }

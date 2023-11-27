@@ -53,6 +53,15 @@ func NewDocIDSearcher(ctx context.Context, indexReader index.IndexReader, ids []
 	}, nil
 }
 
+func (s *DocIDSearcher) NumSlices() int {
+	return 0
+}
+
+func (s *DocIDSearcher) NextInSlice(sliceIndex int, ctx *search.SearchContext) (
+	*search.DocumentMatch, error) {
+	return nil, nil
+}
+
 func (s *DocIDSearcher) Size() int {
 	return reflectStaticSizeDocIDSearcher + size.SizeOfPtr +
 		s.reader.Size() +

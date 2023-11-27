@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -433,6 +434,8 @@ func memNeededForSearch(req *SearchRequest,
 	return uint64(estimate)
 }
 
+var EnableConcurrency = false
+
 // SearchInContext executes a search request operation within the provided
 // Context. Returns a SearchResult object or an error.
 func (i *indexImpl) SearchInContext(ctx context.Context, req *SearchRequest) (sr *SearchResult, err error) {
@@ -443,21 +446,6 @@ func (i *indexImpl) SearchInContext(ctx context.Context, req *SearchRequest) (sr
 
 	if !i.open {
 		return nil, ErrorIndexClosed
-	}
-
-	var reverseQueryExecution bool
-	if req.SearchBefore != nil {
-		reverseQueryExecution = true
-		req.Sort.Reverse()
-		req.SearchAfter = req.SearchBefore
-		req.SearchBefore = nil
-	}
-
-	var coll *collector.TopNCollector
-	if req.SearchAfter != nil {
-		coll = collector.NewTopNCollectorAfter(req.Size, req.Sort, req.SearchAfter)
-	} else {
-		coll = collector.NewTopNCollector(req.Size, req.From, req.Sort)
 	}
 
 	// open a reader for this search
@@ -496,11 +484,11 @@ func (i *indexImpl) SearchInContext(ctx context.Context, req *SearchRequest) (sr
 	ctx = context.WithValue(ctx, search.GeoBufferPoolCallbackKey,
 		search.GeoBufferPoolCallbackFunc(getBufferPool))
 
-
 	// Using a disjunction query to get union of results from KNN query
 	// and the original query
 	searchQuery := disjunctQueryWithKNN(req)
 
+	// per bleve index level --> not at a per searcher level.
 	searcher, err := searchQuery.Searcher(ctx, indexReader, i.m, search.SearcherOptions{
 		Explain:            req.Explain,
 		IncludeTermVectors: req.IncludeLocations || req.Highlight != nil,
@@ -522,6 +510,19 @@ func (i *indexImpl) SearchInContext(ctx context.Context, req *SearchRequest) (sr
 
 		search.RecordSearchCost(ctx, search.DoneM, 0)
 	}()
+
+	concurrentSearchers := searcher.NumSlices()
+	log.Printf("num of concurrent searchers is %v \n", concurrentSearchers)
+
+	var colls []*collector.TopNCollector
+
+	var collMgr *collector.TopNCollectorManager
+	if req.SearchAfter != nil {
+		collMgr = collector.NewTopNCollectorAfterManager(indexReader, req.Size, req.Sort,
+			req.SearchAfter)
+	} else {
+		collMgr = collector.NewTopNCollectorManager(indexReader, req.Size, req.From, req.Sort)
+	}
 
 	if req.Facets != nil {
 		facetsBuilder := search.NewFacetsBuilder(indexReader)
@@ -561,100 +562,158 @@ func (i *indexImpl) SearchInContext(ctx context.Context, req *SearchRequest) (sr
 				facetsBuilder.Add(facetName, facetBuilder)
 			}
 		}
-		coll.SetFacetsBuilder(facetsBuilder)
+		collMgr.SetFacetsBuilder(facetsBuilder)
 	}
 
-	memNeeded := memNeededForSearch(req, searcher, coll)
-	if cb := ctx.Value(SearchQueryStartCallbackKey); cb != nil {
-		if cbF, ok := cb.(SearchQueryStartCallbackFn); ok {
-			err = cbF(memNeeded)
+	for idx := 0; idx < concurrentSearchers; idx++ {
+		var coll *collector.TopNCollector
+		if req.SearchAfter != nil {
+			coll = collector.NewTopNCollectorAfter(collMgr, req.Size, req.Sort, req.SearchAfter)
+		} else {
+			coll = collector.NewTopNCollector(collMgr, req.Size, req.From, req.Sort)
 		}
-	}
-	if err != nil {
-		return nil, err
-	}
+		colls = append(colls, coll)
 
-	if cb := ctx.Value(SearchQueryEndCallbackKey); cb != nil {
-		if cbF, ok := cb.(SearchQueryEndCallbackFn); ok {
-			defer func() {
-				_ = cbF(memNeeded)
-			}()
-		}
-	}
-
-	err = coll.Collect(ctx, searcher, indexReader)
-	if err != nil {
-		return nil, err
-	}
-
-	hits := coll.Results()
-
-	var highlighter highlight.Highlighter
-
-	if req.Highlight != nil {
-		// get the right highlighter
-		highlighter, err = Config.Cache.HighlighterNamed(Config.DefaultHighlighter)
-		if err != nil {
-			return nil, err
-		}
-		if req.Highlight.Style != nil {
-			highlighter, err = Config.Cache.HighlighterNamed(*req.Highlight.Style)
-			if err != nil {
-				return nil, err
+		memNeeded := memNeededForSearch(req, searcher, coll)
+		if cb := ctx.Value(SearchQueryStartCallbackKey); cb != nil {
+			if cbF, ok := cb.(SearchQueryStartCallbackFn); ok {
+				err = cbF(memNeeded)
 			}
 		}
-		if highlighter == nil {
-			return nil, fmt.Errorf("no highlighter named `%s` registered", *req.Highlight.Style)
-		}
-	}
-
-	var storedFieldsCost uint64
-	for _, hit := range hits {
-		if i.name != "" {
-			hit.Index = i.name
-		}
-		err, storedFieldsBytes := LoadAndHighlightFields(hit, req, i.name, indexReader, highlighter)
 		if err != nil {
 			return nil, err
 		}
-		storedFieldsCost += storedFieldsBytes
+
+		if cb := ctx.Value(SearchQueryEndCallbackKey); cb != nil {
+			if cbF, ok := cb.(SearchQueryEndCallbackFn); ok {
+				defer func() {
+					_ = cbF(memNeeded)
+				}()
+			}
+		}
 	}
 
-	totalSearchCost += storedFieldsCost
-	search.RecordSearchCost(ctx, search.AddM, storedFieldsCost)
-
-	atomic.AddUint64(&i.stats.searches, 1)
-	searchDuration := time.Since(searchStart)
-	atomic.AddUint64(&i.stats.searchTime, uint64(searchDuration))
-
-	if Config.SlowSearchLogThreshold > 0 &&
-		searchDuration > Config.SlowSearchLogThreshold {
-		logger.Printf("slow search took %s - %v", searchDuration, req)
+	var reverseQueryExecution bool
+	if req.SearchBefore != nil {
+		reverseQueryExecution = true
+		req.Sort.Reverse()
+		req.SearchAfter = req.SearchBefore
+		req.SearchBefore = nil
 	}
 
+	sortFunc := req.SortFunc()
 	if reverseQueryExecution {
 		// reverse the sort back to the original
 		req.Sort.Reverse()
 		// resort using the original order
-		mhs := newSearchHitSorter(req.Sort, hits)
-		req.SortFunc()(mhs)
+		mhs := newSearchHitSorter(req.Sort, sr.Hits)
+		sortFunc(mhs)
 		// reset request
 		req.SearchBefore = req.SearchAfter
 		req.SearchAfter = nil
 	}
 
-	return &SearchResult{
+	errChan := make(chan error, 0)
+	wgDone := make(chan bool)
+
+	var wg sync.WaitGroup
+	wg.Add(concurrentSearchers)
+
+	// TODO Need to cancel collection for other collections if one errors out.
+	for idx := 0; idx < concurrentSearchers; idx++ {
+		go func(idx int) {
+			defer wg.Done()
+
+			err = colls[idx].Collect(ctx, searcher, indexReader, idx)
+			if err != nil {
+				errChan <- err
+				return
+			}
+
+		}(idx)
+	}
+
+	go func() {
+		wg.Wait()
+		close(wgDone)
+	}()
+
+	var finalError error
+	select {
+	case <-wgDone:
+		break
+
+	case err := <-errChan:
+		finalError = err
+		break
+	}
+
+	if finalError != nil {
+		return nil, finalError
+	}
+
+	atomic.AddUint64(&i.stats.searches, 1)
+	searchDuration := time.Since(searchStart)
+	atomic.AddUint64(&i.stats.searchTime, uint64(searchDuration))
+
+	err = collMgr.FinalizeResults()
+	if err != nil {
+		return nil, err
+	}
+
+	var storedFieldsCost uint64
+	for _, hit := range collMgr.Results() {
+		var highlighter highlight.Highlighter
+
+		if req.Highlight != nil {
+			// get the right highlighter
+			highlighter, err = Config.Cache.HighlighterNamed(Config.DefaultHighlighter)
+			if err != nil {
+				return nil, err
+			}
+			if req.Highlight.Style != nil {
+				highlighter, err = Config.Cache.HighlighterNamed(*req.Highlight.Style)
+				if err != nil {
+					return nil, err
+				}
+			}
+			if highlighter == nil {
+				return nil,
+					fmt.Errorf("no highlighter named `%s` registered", *req.Highlight.Style)
+			}
+		}
+
+		if i.name != "" {
+			hit.Index = i.name
+		}
+		err, storedFieldsBytes := LoadAndHighlightFields(hit, req, i.name,
+			indexReader, highlighter)
+		if err != nil {
+			return nil, err
+		}
+		storedFieldsCost += storedFieldsBytes
+		search.RecordSearchCost(ctx, search.AddM, storedFieldsCost)
+
+		totalSearchCost += storedFieldsCost
+	}
+
+	sr = &SearchResult{
 		Status: &SearchStatus{
 			Total:      1,
 			Successful: 1,
 		},
 		Request:  req,
-		Hits:     hits,
-		Total:    coll.Total(),
-		MaxScore: coll.MaxScore(),
-		Took:     searchDuration,
-		Facets:   coll.FacetResults(),
-	}, nil
+		Hits:     collMgr.Results(),
+		Total:    collMgr.Total(),
+		MaxScore: collMgr.MaxScore(),
+		// Using mgr.Took() here, not searchDuration
+		// Former is combined search time across collections
+		// Latter is time spent by the longest running collection
+		Took:   collMgr.Took(),
+		Facets: collMgr.FacetResults(),
+	}
+
+	return sr, nil
 }
 
 func LoadAndHighlightFields(hit *search.DocumentMatch, req *SearchRequest,
@@ -663,6 +722,9 @@ func LoadAndHighlightFields(hit *search.DocumentMatch, req *SearchRequest,
 	var totalStoredFieldsBytes uint64
 	if len(req.Fields) > 0 || highlighter != nil {
 		doc, err := r.Document(hit.ID)
+		if doc == nil && err == nil {
+			return nil, 0
+		}
 		totalStoredFieldsBytes = doc.StoredFieldsBytes()
 		if err == nil && doc != nil {
 			if len(req.Fields) > 0 {

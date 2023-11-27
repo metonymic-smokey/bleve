@@ -72,6 +72,8 @@ type TopNCollector struct {
 	updateFieldVisitor        index.DocValueVisitor
 	dvReader                  index.DocValueReader
 	searchAfter               *search.DocumentMatch
+
+	mgr *TopNCollectorManager
 }
 
 // CheckDoneEvery controls how frequently we check the context deadline
@@ -80,15 +82,17 @@ const CheckDoneEvery = uint64(1024)
 // NewTopNCollector builds a collector to find the top 'size' hits
 // skipping over the first 'skip' hits
 // ordering hits by the provided sort order
-func NewTopNCollector(size int, skip int, sort search.SortOrder) *TopNCollector {
-	return newTopNCollector(size, skip, sort)
+func NewTopNCollector(collMgr *TopNCollectorManager, size int, skip int,
+	sort search.SortOrder) *TopNCollector {
+	return newTopNCollector(collMgr, size, skip, sort)
 }
 
 // NewTopNCollectorAfter builds a collector to find the top 'size' hits
 // skipping over the first 'skip' hits
 // ordering hits by the provided sort order
-func NewTopNCollectorAfter(size int, sort search.SortOrder, after []string) *TopNCollector {
-	rv := newTopNCollector(size, 0, sort)
+func NewTopNCollectorAfter(collMgr *TopNCollectorManager, size int,
+	sort search.SortOrder, after []string) *TopNCollector {
+	rv := newTopNCollector(collMgr, size, 0, sort)
 	rv.searchAfter = &search.DocumentMatch{
 		Sort: after,
 	}
@@ -107,8 +111,10 @@ func NewTopNCollectorAfter(size int, sort search.SortOrder, after []string) *Top
 	return rv
 }
 
-func newTopNCollector(size int, skip int, sort search.SortOrder) *TopNCollector {
-	hc := &TopNCollector{size: size, skip: skip, sort: sort}
+func newTopNCollector(collMgr *TopNCollectorManager, size int, skip int,
+	sort search.SortOrder) *TopNCollector {
+	hc := &TopNCollector{mgr: collMgr,
+		size: size, skip: skip, sort: sort}
 
 	// pre-allocate space on the store to avoid reslicing
 	// unless the size + skip is too large, then cap it
@@ -156,7 +162,8 @@ func (hc *TopNCollector) Size() int {
 }
 
 // Collect goes to the index to find the matching documents
-func (hc *TopNCollector) Collect(ctx context.Context, searcher search.Searcher, reader index.IndexReader) error {
+func (hc *TopNCollector) Collect(ctx context.Context, searcher search.Searcher, reader index.IndexReader,
+	sliceIndex int) error {
 	startTime := time.Now()
 	var err error
 	var next *search.DocumentMatch
@@ -180,8 +187,10 @@ func (hc *TopNCollector) Collect(ctx context.Context, searcher search.Searcher, 
 	}
 
 	hc.updateFieldVisitor = func(field string, term []byte) {
-		if hc.facetsBuilder != nil {
-			hc.facetsBuilder.UpdateVisitor(field, term)
+		if hc.mgr.facetsBuilder != nil {
+			hc.mgr.childMutex.Lock()
+			hc.mgr.facetsBuilder.UpdateVisitor(field, term)
+			hc.mgr.childMutex.Unlock()
 		}
 		hc.sort.UpdateVisitor(field, term)
 	}
@@ -203,7 +212,7 @@ func (hc *TopNCollector) Collect(ctx context.Context, searcher search.Searcher, 
 		search.RecordSearchCost(ctx, search.AbortM, 0)
 		return ctx.Err()
 	default:
-		next, err = searcher.Next(searchContext)
+		next, err = searcher.NextInSlice(sliceIndex, searchContext)
 	}
 	for err == nil && next != nil {
 		if hc.total%CheckDoneEvery == 0 {
@@ -225,7 +234,7 @@ func (hc *TopNCollector) Collect(ctx context.Context, searcher search.Searcher, 
 			break
 		}
 
-		next, err = searcher.Next(searchContext)
+		next, err = searcher.NextInSlice(sliceIndex, searchContext)
 	}
 
 	statsCallbackFn := ctx.Value(search.SearchIOStatsCallbackKey)
@@ -240,19 +249,20 @@ func (hc *TopNCollector) Collect(ctx context.Context, searcher search.Searcher, 
 
 	// help finalize/flush the results in case
 	// of custom document match handlers.
-	err = dmHandler(nil)
-	if err != nil {
-		return err
-	}
+	/*
+		err = dmHandler(nil)
+		if err != nil {
+			return err
+		}
+	*/
 
 	// compute search duration
 	hc.took = time.Since(startTime)
+	// adding this to the mgr's 'took' field.
+	hc.mgr.tookMutext.Lock()
+	hc.mgr.took += hc.took
+	hc.mgr.tookMutext.Unlock()
 
-	// finalize actual results
-	err = hc.finalizeResults(reader)
-	if err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -262,17 +272,22 @@ func (hc *TopNCollector) prepareDocumentMatch(ctx *search.SearchContext,
 	reader index.IndexReader, d *search.DocumentMatch) (err error) {
 
 	// visit field terms for features that require it (sort, facets)
-	if len(hc.neededFields) > 0 {
+	if len(hc.mgr.neededFields) > 0 {
+		// clears this check as expected.
 		err = hc.visitFieldTerms(reader, d)
 		if err != nil {
 			return err
 		}
 	}
 
-	// increment total hits
 	hc.total++
-	d.HitNumber = hc.total
+	hc.mgr.childMutex.Lock()
+	// increment total hits
+	hc.mgr.total++
+	hc.mgr.childMutex.Unlock()
+	d.HitNumber = hc.mgr.total
 
+	// should this be done for all collectors in a mgr now?
 	// update max score
 	if d.Score > hc.maxScore {
 		hc.maxScore = d.Score
@@ -331,7 +346,8 @@ func MakeTopNDocumentMatchHandler(
 				}
 			}
 
-			removed := hc.store.AddNotExceedingSize(d, hc.size+hc.skip)
+			hc.mgr.childMutex.Lock()
+			removed := hc.mgr.store.AddNotExceedingSize(d, hc.size+hc.skip)
 			if removed != nil {
 				if hc.lowestMatchOutsideResults == nil {
 					hc.lowestMatchOutsideResults = removed
@@ -345,6 +361,7 @@ func MakeTopNDocumentMatchHandler(
 					}
 				}
 			}
+			hc.mgr.childMutex.Unlock()
 			return nil
 		}, false, nil
 	}
@@ -354,13 +371,16 @@ func MakeTopNDocumentMatchHandler(
 // visitFieldTerms is responsible for visiting the field terms of the
 // search hit, and passing visited terms to the sort and facet builder
 func (hc *TopNCollector) visitFieldTerms(reader index.IndexReader, d *search.DocumentMatch) error {
-	if hc.facetsBuilder != nil {
-		hc.facetsBuilder.StartDoc()
+	if hc.mgr.facetsBuilder != nil {
+		hc.mgr.facetsBuilder.StartDoc()
 	}
 
+	// this update visitor should be linked to the mgr's update visitor.
+	// so disk reads will happen in parallel and facets, etc. will be updated right
+	// in the mgr.
 	err := hc.dvReader.VisitDocValues(d.IndexInternalID, hc.updateFieldVisitor)
-	if hc.facetsBuilder != nil {
-		hc.facetsBuilder.EndDoc()
+	if hc.mgr.facetsBuilder != nil {
+		hc.mgr.facetsBuilder.EndDoc()
 	}
 
 	hc.bytesRead += hc.dvReader.BytesRead()

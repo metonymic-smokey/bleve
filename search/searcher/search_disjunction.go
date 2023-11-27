@@ -99,6 +99,7 @@ func optimizeCompositeSearcher(ctx context.Context, optimizationKind string,
 	}
 
 	return newTermSearcherFromReader(indexReader, tfr,
+		// this nil is just a placeholder
 		[]byte(optimizationKind), "*", 1.0, options)
 }
 

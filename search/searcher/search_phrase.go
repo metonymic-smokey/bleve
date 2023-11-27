@@ -179,6 +179,11 @@ func (s *PhraseSearcher) computeQueryNorm() {
 	}
 }
 
+func (s *PhraseSearcher) NextInSlice(sliceIndex int, ctx *search.SearchContext) (
+	*search.DocumentMatch, error) {
+	return nil, nil
+}
+
 func (s *PhraseSearcher) initSearchers(ctx *search.SearchContext) error {
 	err := s.advanceNextMust(ctx)
 	if err != nil {
@@ -211,6 +216,10 @@ func (s *PhraseSearcher) Weight() float64 {
 
 func (s *PhraseSearcher) SetQueryNorm(qnorm float64) {
 	s.mustSearcher.SetQueryNorm(qnorm)
+}
+
+func (s *PhraseSearcher) NumSlices() int {
+	return 0
 }
 
 func (s *PhraseSearcher) Next(ctx *search.SearchContext) (*search.DocumentMatch, error) {

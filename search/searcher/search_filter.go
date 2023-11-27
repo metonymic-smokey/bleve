@@ -54,6 +54,10 @@ func (f *FilteringSearcher) Size() int {
 		f.child.Size()
 }
 
+func (f *FilteringSearcher) NumSlices() int {
+	return 0
+}
+
 func (f *FilteringSearcher) Next(ctx *search.SearchContext) (*search.DocumentMatch, error) {
 	next, err := f.child.Next(ctx)
 	for next != nil && err == nil {
@@ -101,4 +105,9 @@ func (f *FilteringSearcher) Min() int {
 
 func (f *FilteringSearcher) DocumentMatchPoolSize() int {
 	return f.child.DocumentMatchPoolSize()
+}
+
+func (f *FilteringSearcher) NextInSlice(sliceIndex int, ctx *search.SearchContext) (
+	*search.DocumentMatch, error) {
+	return nil, nil
 }

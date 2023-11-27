@@ -354,6 +354,11 @@ type Searcher interface {
 	Size() int
 
 	DocumentMatchPoolSize() int
+
+	// returns the number of slices i.e. groups of segments, each group being
+	// searched concurrently
+	NumSlices() int
+	NextInSlice(sliceIdx int, ctx *SearchContext) (*DocumentMatch, error)
 }
 
 type SearcherOptions struct {
@@ -367,6 +372,10 @@ type SearchContext struct {
 	DocumentMatchPool *DocumentMatchPool
 	Collector         Collector
 	IndexReader       index.IndexReader
+}
+
+type ConcurrentSearcher interface {
+	NextInSlice(sliceIdx int, ctx *SearchContext) (*DocumentMatch, error)
 }
 
 func (sc *SearchContext) Size() int {

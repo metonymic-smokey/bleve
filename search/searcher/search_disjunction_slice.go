@@ -223,6 +223,10 @@ func (s *DisjunctionSliceSearcher) Next(ctx *search.SearchContext) (
 	return rv, nil
 }
 
+func (s *DisjunctionSliceSearcher) NumSlices() int {
+	return 0
+}
+
 func (s *DisjunctionSliceSearcher) Advance(ctx *search.SearchContext,
 	ID index.IndexInternalID) (*search.DocumentMatch, error) {
 	if !s.initialized {
@@ -297,5 +301,10 @@ func (s *DisjunctionSliceSearcher) Optimize(kind string, octx index.OptimizableC
 		}
 	}
 
+	return nil, nil
+}
+
+func (s *DisjunctionSliceSearcher) NextInSlice(sliceIndex int, ctx *search.SearchContext) (
+	*search.DocumentMatch, error) {
 	return nil, nil
 }

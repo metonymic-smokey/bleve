@@ -2,6 +2,8 @@ module github.com/blevesearch/bleve/v2
 
 go 1.20
 
+replace github.com/blevesearch/bleve_index_api => ../bleve_index_api
+
 require (
 	github.com/RoaringBitmap/roaring v1.2.3
 	github.com/bits-and-blooms/bitset v1.2.0
