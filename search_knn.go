@@ -274,22 +274,26 @@ func mergeKNN(req *SearchRequest, sr *SearchResult) {
 	}
 	nonZeroScoreHits := make([]*search.DocumentMatch, 0, len(sr.Hits))
 	maxScore := 0.0
-	var numHitsDropped uint64
 	for _, hit := range sr.Hits {
 		newScore := recomputeTotalScore(req.KNNOperator, hit)
-		if newScore > 0 {
-			hit.Score = newScore
-			if newScore > maxScore {
-				maxScore = newScore
-			}
-			nonZeroScoreHits = append(nonZeroScoreHits, hit)
-		} else {
-			numHitsDropped++
+		hit.Score = newScore
+		if newScore > maxScore {
+			maxScore = newScore
 		}
+		nonZeroScoreHits = append(nonZeroScoreHits, hit)
 	}
 	sr.Hits = nonZeroScoreHits
 	sr.MaxScore = maxScore
-	sr.Total -= numHitsDropped
+
+	// If the user does not want an explanation about the score/the score itself,
+	// set it to 0
+	// This is different from the case with tf-idf where we do not do score
+	// computations at all in cases such as score="none"
+	if req.Score == "none" {
+		for _, hit := range sr.Hits {
+			hit.Score = 0
+		}
+	}
 }
 
 func recomputeTotalScore(operator knnOperator, hit *search.DocumentMatch) float64 {

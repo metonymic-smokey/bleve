@@ -67,21 +67,21 @@ func (sqs *KNNQueryScorer) Score(ctx *search.SearchContext,
 	knnMatch *index.VectorDoc) *search.DocumentMatch {
 	rv := ctx.DocumentMatchPool.Get()
 
-	if sqs.includeScore || sqs.options.Explain {
-		var scoreExplanation *search.Explanation
-		score := knnMatch.Score
-		if sqs.similarityMetric == index.EuclideanDistance {
-			// in case of euclidean distance being the distance metric,
-			// an exact vector (perfect match), would return distance = 0
-			if score == 0 {
-				score = maxKNNScore
-			} else {
-				// euclidean distances need to be inverted to work with
-				// tf-idf scoring
-				score = 1.0 / score
-			}
+	score := knnMatch.Score
+	if sqs.similarityMetric == index.EuclideanDistance {
+		// in case of euclidean distance being the distance metric,
+		// an exact vector (perfect match), would return distance = 0
+		if score == 0 {
+			score = maxKNNScore
+		} else {
+			// euclidean distances need to be inverted to work with
+			// tf-idf scoring
+			score = 1.0 / score
 		}
+	}
 
+	if sqs.options.Explain {
+		var scoreExplanation *search.Explanation
 		if sqs.options.Explain {
 			childExplanations := make([]*search.Explanation, 1)
 			childExplanations[0] = &search.Explanation{
@@ -116,14 +116,10 @@ func (sqs *KNNQueryScorer) Score(ctx *search.SearchContext,
 			}
 		}
 
-		if sqs.includeScore {
-			rv.Score = score
-		}
-
-		if sqs.options.Explain {
-			rv.Expl = scoreExplanation
-		}
+		rv.Expl = scoreExplanation
 	}
+
+	rv.Score = score
 
 	rv.IndexInternalID = append(rv.IndexInternalID, knnMatch.ID...)
 	return rv
